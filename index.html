@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>機台維修管理系統</title>
+<style>
+  :root{
+    --bg:#F5F6F5;
+    --panel:#FFFFFF;
+    --ink:#1E2421;
+    --ink-soft:#5B655F;
+    --line:#DDE2DE;
+    --brand:#2F6F4E;
+    --brand-soft:#E6F0EA;
+    --warn:#B8542A;
+    --warn-soft:#FBEAE0;
+    --danger:#B23A3A;
+    --radius:10px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);}
+  header{
+    background:var(--panel);border-bottom:1px solid var(--line);
+    padding:16px 24px;display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:10;
+  }
+  header h1{font-size:18px;margin:0;font-weight:700;}
+  header .sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  #apiBtn{
+    border:1px solid var(--line);background:var(--panel);border-radius:8px;
+    padding:8px 14px;font-size:13px;cursor:pointer;color:var(--ink-soft);
+  }
+  #apiBtn:hover{border-color:var(--brand);color:var(--brand);}
+  nav{display:flex;gap:4px;padding:12px 24px 0;background:var(--panel);border-bottom:1px solid var(--line);}
+  nav button{
+    border:none;background:transparent;padding:10px 16px;font-size:14px;cursor:pointer;
+    color:var(--ink-soft);border-bottom:2px solid transparent;font-weight:600;
+  }
+  nav button.active{color:var(--brand);border-bottom-color:var(--brand);}
+  main{padding:24px;max-width:1200px;margin:0 auto;}
+  .grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+  .stat-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .stat-card .label{font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .stat-card .value{font-size:26px;font-weight:700;}
+  .stat-card .note{font-size:11px;color:var(--ink-soft);margin-top:4px;}
+  .stat-card.warn .value{color:var(--warn);}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+  input[type=text],select{
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;color:var(--ink);
+  }
+  .btn{
+    border:none;background:var(--brand);color:#fff;padding:8px 16px;border-radius:8px;
+    font-size:13px;cursor:pointer;font-weight:600;
+  }
+  .btn:hover{opacity:.9;}
+  .btn.secondary{background:var(--panel);color:var(--brand);border:1px solid var(--brand);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th{color:var(--ink-soft);font-weight:600;font-size:12px;position:sticky;top:0;background:var(--panel);}
+  tbody tr:hover{background:var(--bg);}
+  .table-wrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;background:var(--brand-soft);color:var(--brand);}
+  .badge.low{background:var(--warn-soft);color:var(--warn);}
+  .empty{color:var(--ink-soft);font-size:13px;padding:30px;text-align:center;}
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(20,24,22,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{background:#fff;border-radius:var(--radius);padding:22px;width:100%;max-width:480px;max-height:88vh;overflow:auto;}
+  .modal h3{margin-top:0;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .msg{font-size:12px;padding:10px 12px;border-radius:8px;margin-bottom:12px;}
+  .msg.error{background:var(--warn-soft);color:var(--warn);}
+  .msg.ok{background:var(--brand-soft);color:var(--brand);}
+  .loading{text-align:center;color:var(--ink-soft);padding:40px;font-size:13px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>機台維修管理系統</h1>
+    <div class="sub" id="statusLine">尚未連線</div>
+  </div>
+  <button id="apiBtn">設定 API 位址</button>
+</header>
+
+<nav id="tabs">
+  <button data-tab="dashboard" class="active">總覽</button>
+  <button data-tab="machines">機台總覽</button>
+  <button data-tab="inventory">備品庫存</button>
+  <button data-tab="repair">維修紀錄</button>
+</nav>
+
+<main id="main">
+  <div class="loading">請先設定 Google Apps Script 的 API 位址</div>
+</main>
+
+<!-- API 設定 modal -->
+<div class="modal-backdrop" id="apiModal">
+  <div class="modal">
+    <h3>設定 API 位址</h3>
+    <p style="font-size:13px;color:var(--ink-soft);">請貼上你部署 Google Apps Script 網頁應用程式後拿到的網址（結尾通常是 <code>/exec</code>）。</p>
+    <div class="field">
+      <label>Apps Script Web App 網址</label>
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxx/exec">
+    </div>
+    <div id="apiMsg"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="apiCancel">取消</button>
+      <button class="btn" id="apiSave">儲存並連線</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增機台 modal -->
+<div class="modal-backdrop" id="machineModal">
+  <div class="modal">
+    <h3>新增機台</h3>
+    <div id="machineMsg"></div>
+    <div class="field">
+      <label>機台序號 (sn) *</label>
+      <input type="text" id="m_sn" placeholder="FCM-A01000001">
+    </div>
+    <div class="field">
+      <label>類型 (type) *</label>
+      <select id="m_type"></select>
+    </div>
+    <div class="field">
+      <label>狀態 (status) *</label>
+      <select id="m_status"></select>
+    </div>
+    <div class="field">
+      <label>店號 (store_no)</label>
+      <input type="text" id="m_store_no">
+    </div>
+    <div class="field">
+      <label>問題描述 (issue)</label>
+      <input type="text" id="m_issue">
+    </div>
+    <div class="field">
+      <label>負責人 (owner)</label>
+      <input type="text" id="m_owner">
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="machineCancel">取消</button>
+      <button class="btn" id="machineSave">新增</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LS_KEY = 'repair_system_api_url';
+let API_URL = localStorage.getItem(LS_KEY) || '';
+let DATA = null;
+let currentTab = 'dashboard';
+
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function fmt(v){ return (v===null||v===undefined||v==='') ? '—' : v; }
+
+/* ---------- API ---------- */
+
+async function fetchData(){
+  if(!API_URL){ renderNoApi(); return; }
+  $('#statusLine').textContent = '載入中…';
+  try{
+    const res = await fetch(API_URL + '?action=data');
+    const json = await res.json();
+    if(json.error) throw new Error(json.error);
+    DATA = json;
+    $('#statusLine').textContent = '已連線・共 ' + (DATA.machines||[]).length + ' 筆機台資料';
+    render();
+  }catch(err){
+    $('#statusLine').textContent = '連線失敗：' + err.message;
+    $('#main').innerHTML = '<div class="panel"><div class="msg error">讀取資料失敗，請確認 API 位址是否正確、Apps Script 是否已部署為「任何人」可存取。<br>錯誤訊息：'+err.message+'</div></div>';
+  }
+}
+
+async function callApi(payload){
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if(json.error) throw new Error(json.error);
+  return json.result;
+}
+
+/* ---------- settings helpers ---------- */
+
+function settingValues(key){
+  if(!DATA) return [];
+  return (DATA.settings||[]).filter(r=>r.key===key).map(r=>r.value);
+}
+
+/* ---------- stats ---------- */
+
+function computeStats(){
+  const machines = DATA.machines || [];
+  const inventory = DATA.inventory || [];
+
+  const storeNos = new Set();
+  machines.forEach(m=>{
+    if(m.status === 'STORE' || m.status === 'STORE - 異常'){
+      const n = Number(m.store_no);
+      if(m.store_no !== null && !isNaN(n)) storeNos.add(n);
+    }
+  });
+
+  const lowStock = inventory.filter(i=>{
+    const q = parseFloat(String(i.quantity).replace('+',''));
+    const min = Number(i.min_qty);
+    return !isNaN(q) && !isNaN(min) && q < min;
+  });
+
+  const repairing = machines.filter(m=>m.status === '台灣維修中').length;
+
+  const byType = {};
+  machines.forEach(m=>{ byType[m.type] = (byType[m.type]||0)+1; });
+
+  return { storeCount: storeNos.size, lowStock, repairing, byType, total: machines.length };
+}
+
+/* ---------- render ---------- */
+
+function renderNoApi(){
+  $('#main').innerHTML = '<div class="panel"><div class="empty">尚未設定 API 位址，請點右上角「設定 API 位址」開始連線。</div></div>';
+}
+
+function render(){
+  if(!DATA){ return; }
+  if(currentTab === 'dashboard') renderDashboard();
+  else if(currentTab === 'machines') renderMachines();
+  else if(currentTab === 'inventory') renderInventory();
+  else if(currentTab === 'repair') renderRepair();
+}
+
+function renderDashboard(){
+  const s = computeStats();
+  const typeRows = Object.entries(s.byType).map(([t,c])=>`<tr><td>${t}</td><td>${c}</td></tr>`).join('');
+  $('#main').innerHTML = `
+    <div class="grid-stats">
+      <div class="stat-card"><div class="label">機台總數</div><div class="value">${s.total}</div></div>
+      <div class="stat-card"><div class="label">STORE 店家數（含 STORE 異常）</div><div class="value">${s.storeCount}</div><div class="note">不重複數字店號</div></div>
+      <div class="stat-card warn"><div class="label">低庫存零件</div><div class="value">${s.lowStock.length}</div><div class="note">數量 &lt; 最低庫存</div></div>
+      <div class="stat-card"><div class="label">台灣維修中</div><div class="value">${s.repairing}</div></div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0;">依類型分布</h3>
+      <table><thead><tr><th>類型</th><th>數量</th></tr></thead><tbody>${typeRows}</tbody></table>
+    </div>
+    ${s.lowStock.length ? `
+    <div class="panel">
+      <h3 style="margin-top:0;">低庫存零件清單</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>品名</th><th>模組</th><th>目前庫存</th><th>最低庫存</th></tr></thead>
+        <tbody>${s.lowStock.map(i=>`<tr><td>${fmt(i.name)}</td><td>${fmt(i.module)}</td><td>${fmt(i.quantity)}</td><td>${fmt(i.min_qty)}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>` : ''}
+  `;
+}
+
+function renderMachines(){
+  const types = [...new Set((DATA.machines||[]).map(m=>m.type))].filter(Boolean);
+  const statuses = [...new Set((DATA.machines||[]).map(m=>m.status))].filter(Boolean);
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="searchSn" placeholder="搜尋機台序號 (sn)">
+        <select id="filterType"><option value="">全部類型</option>${types.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+        <select id="filterStatus"><option value="">全部狀態</option>${statuses.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        <button class="btn" id="addMachineBtn">＋ 新增機台</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>sn</th><th>type</th><th>status</th><th>store_no</th><th>issue</th><th>owner</th>
+          <th>機器損壞時間（NID出貨）</th><th>NID入庫（不良品）</th><th>台灣入庫（不良品）</th>
+        </tr></thead>
+        <tbody id="machineRows"></tbody>
+      </table></div>
+    </div>
+  `;
+  $('#addMachineBtn').onclick = openMachineModal;
+  $('#searchSn').oninput = drawMachineRows;
+  $('#filterType').onchange = drawMachineRows;
+  $('#filterStatus').onchange = drawMachineRows;
+  drawMachineRows();
+}
+
+function drawMachineRows(){
+  const search = ($('#searchSn').value||'').toLowerCase();
+  const type = $('#filterType').value;
+  const status = $('#filterStatus').value;
+  let rows = DATA.machines || [];
+  if(search) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(search));
+  if(type) rows = rows.filter(m=>m.type===type);
+  if(status) rows = rows.filter(m=>m.status===status);
+  rows = rows.slice(0, 500); // 前端效能保護，先只顯示前 500 筆符合條件的
+  $('#machineRows').innerHTML = rows.map(m=>`
+    <tr>
+      <td>${fmt(m.sn)}</td><td>${fmt(m.type)}</td><td><span class="badge">${fmt(m.status)}</span></td>
+      <td>${fmt(m.store_no)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
+      <td>${fmt(m['機器損壞時間（NID出貨）'])}</td>
+      <td>${fmt(m['NID入庫（不良品）'])}</td>
+      <td>${fmt(m['台灣入庫（不良品）'])}</td>
+    </tr>`).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
+}
+
+function renderInventory(){
+  const rows = DATA.inventory || [];
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="table-wrap"><table>
+        <thead><tr><th>模組</th><th>分類</th><th>品名</th><th>規格</th><th>庫存</th><th>最低庫存</th><th>備註</th></tr></thead>
+        <tbody>${rows.map(i=>{
+          const q = parseFloat(String(i.quantity).replace('+',''));
+          const min = Number(i.min_qty);
+          const low = !isNaN(q) && !isNaN(min) && q < min;
+          return `<tr>
+            <td>${fmt(i.module)}</td><td>${fmt(i.category)}</td><td>${fmt(i.name)}</td><td>${fmt(i.spec)}</td>
+            <td>${low?`<span class="badge low">${fmt(i.quantity)}</span>`:fmt(i.quantity)}</td>
+            <td>${fmt(i.min_qty)}</td><td>${fmt(i.note)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>
+  `;
+}
+
+function renderRepair(){
+  const rows = DATA.repair_log || [];
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="table-wrap"><table>
+        <thead><tr><th>sn</th><th>step</th><th>note</th><th>parts</th><th>operator</th><th>timestamp</th></tr></thead>
+        <tbody>${rows.length ? rows.map(r=>`<tr>
+          <td>${fmt(r.sn)}</td><td>${fmt(r.step)}</td><td>${fmt(r.note)}</td><td>${fmt(r.parts)}</td><td>${fmt(r.operator)}</td><td>${fmt(r.timestamp)}</td>
+        </tr>`).join('') : '<tr><td colspan="6" class="empty">目前沒有維修紀錄</td></tr>'}</tbody>
+      </table></div>
+    </div>
+  `;
+}
+
+/* ---------- 新增機台 modal ---------- */
+
+function openMachineModal(){
+  const types = settingValues('type');
+  const statuses = settingValues('status');
+  $('#m_type').innerHTML = types.map(t=>`<option value="${t}">${t}</option>`).join('');
+  $('#m_status').innerHTML = statuses.map(s=>`<option value="${s}">${s}</option>`).join('');
+  $('#m_sn').value=''; $('#m_store_no').value=''; $('#m_issue').value=''; $('#m_owner').value='';
+  $('#machineMsg').innerHTML='';
+  $('#machineModal').classList.add('show');
+}
+
+$('#machineCancel').onclick = ()=> $('#machineModal').classList.remove('show');
+
+$('#machineSave').onclick = async ()=>{
+  const sn = $('#m_sn').value.trim();
+  if(!sn){ $('#machineMsg').innerHTML = '<div class="msg error">請輸入機台序號</div>'; return; }
+  const data = {
+    sn, type: $('#m_type').value, status: $('#m_status').value,
+    store_no: $('#m_store_no').value || null,
+    issue: $('#m_issue').value || null,
+    owner: $('#m_owner').value || null
+  };
+  try{
+    await callApi({ action:'addMachine', data });
+    $('#machineModal').classList.remove('show');
+    await fetchData();
+    currentTab='machines'; setActiveTab('machines'); render();
+  }catch(err){
+    $('#machineMsg').innerHTML = '<div class="msg error">新增失敗：'+err.message+'</div>';
+  }
+};
+
+/* ---------- API 設定 modal ---------- */
+
+$('#apiBtn').onclick = ()=>{
+  $('#apiUrlInput').value = API_URL;
+  $('#apiMsg').innerHTML='';
+  $('#apiModal').classList.add('show');
+};
+$('#apiCancel').onclick = ()=> $('#apiModal').classList.remove('show');
+$('#apiSave').onclick = async ()=>{
+  const url = $('#apiUrlInput').value.trim();
+  if(!url){ $('#apiMsg').innerHTML='<div class="msg error">請輸入網址</div>'; return; }
+  API_URL = url;
+  localStorage.setItem(LS_KEY, url);
+  $('#apiModal').classList.remove('show');
+  await fetchData();
+};
+
+/* ---------- tabs ---------- */
+
+function setActiveTab(tab){
+  $$('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+}
+$$('#tabs button').forEach(btn=>{
+  btn.onclick = ()=>{
+    currentTab = btn.dataset.tab;
+    setActiveTab(currentTab);
+    render();
+  };
+});
+
+/* ---------- init ---------- */
+
+fetchData();
+</script>
+</body>
+</html>
