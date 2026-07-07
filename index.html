@@ -166,6 +166,25 @@ const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
 function fmt(v){ return (v===null||v===undefined||v==='') ? '—' : v; }
 
+function fmtDate(v){
+  if(v===null||v===undefined||v==='') return '—';
+  const m = String(v).match(/^(\d{4}-\d{2}-\d{2})T/);
+  if(m) return m[1];
+  return v;
+}
+
+// 有些 Google Sheet 標題儲存格裡藏了換行符號（例如「機器損壞時間\n（NID出貨）」），
+// 這個函式會先試試看完全對應的欄位名稱，找不到的話再忽略換行/空白去比對一次。
+function getField(obj, key){
+  if(obj[key] !== undefined) return obj[key];
+  const normalize = s => s.replace(/[\s\n\r]+/g,'');
+  const targetNorm = normalize(key);
+  for(const k in obj){
+    if(normalize(k) === targetNorm) return obj[k];
+  }
+  return null;
+}
+
 /* ---------- API ---------- */
 
 async function fetchData(){
@@ -309,9 +328,9 @@ function drawMachineRows(){
     <tr>
       <td>${fmt(m.sn)}</td><td>${fmt(m.type)}</td><td><span class="badge">${fmt(m.status)}</span></td>
       <td>${fmt(m.store_no)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
-      <td>${fmt(m['機器損壞時間（NID出貨）'])}</td>
-      <td>${fmt(m['NID入庫（不良品）'])}</td>
-      <td>${fmt(m['台灣入庫（不良品）'])}</td>
+      <td>${fmtDate(getField(m,'機器損壞時間（NID出貨）'))}</td>
+      <td>${fmtDate(getField(m,'NID入庫（不良品）'))}</td>
+      <td>${fmtDate(getField(m,'台灣入庫（不良品）'))}</td>
     </tr>`).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
 }
 
