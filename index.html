@@ -177,7 +177,7 @@ function fmtDate(v){
 // 這個函式會先試試看完全對應的欄位名稱，找不到的話再忽略換行/空白去比對一次。
 function getField(obj, key){
   if(obj[key] !== undefined) return obj[key];
-  const normalize = s => s.replace(/[\s\n\r]+/g,'');
+  const normalize = s => s.replace(/[\s\n\r]+/g,'').replace(/[（）]/g,m=>m==='（'?'(':')');
   const targetNorm = normalize(key);
   for(const k in obj){
     if(normalize(k) === targetNorm) return obj[k];
@@ -357,13 +357,12 @@ function renderInventory(){
 
 function renderRepair(){
   const rows = DATA.repair_log || [];
+  const cols = ['機器狀態','機器編號','店號','問題回報','案件編號','NID寄出日期','入芳苑日期'];
   $('#main').innerHTML = `
     <div class="panel">
       <div class="table-wrap"><table>
-        <thead><tr><th>sn</th><th>step</th><th>note</th><th>parts</th><th>operator</th><th>timestamp</th></tr></thead>
-        <tbody>${rows.length ? rows.map(r=>`<tr>
-          <td>${fmt(r.sn)}</td><td>${fmt(r.step)}</td><td>${fmt(r.note)}</td><td>${fmt(r.parts)}</td><td>${fmt(r.operator)}</td><td>${fmt(r.timestamp)}</td>
-        </tr>`).join('') : '<tr><td colspan="6" class="empty">目前沒有維修紀錄</td></tr>'}</tbody>
+        <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td>${fmt(getField(r,c))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">目前沒有維修紀錄</td></tr>`}</tbody>
       </table></div>
     </div>
   `;
