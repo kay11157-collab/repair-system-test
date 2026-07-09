@@ -396,7 +396,7 @@ function renderInventory(){
 
 function renderRepair(){
   const rows = DATA.repair_log || [];
-  const cols = ['機器狀態','機器編號','店號','問題回報','案件編號','NID寄出日期','入芳苑日期'];
+  const cols = ['NO','機器狀態','機器編號','店號','問題回報','案件編號','NID寄出日期','入芳苑日期'];
   $('#main').innerHTML = `
     <div class="panel">
       <div class="table-wrap"><table>
