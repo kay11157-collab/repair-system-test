@@ -79,6 +79,11 @@
   .msg.error{background:var(--warn-soft);color:var(--warn);}
   .msg.ok{background:var(--brand-soft);color:var(--brand);}
   .loading{text-align:center;color:var(--ink-soft);padding:40px;font-size:13px;}
+  .pagination{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+  .page-info{font-size:12px;color:var(--ink-soft);}
+  .page-controls{display:flex;align-items:center;gap:6px;}
+  .page-num{font-size:13px;color:var(--ink-soft);padding:0 6px;white-space:nowrap;}
+  .btn.secondary:disabled{opacity:.4;cursor:not-allowed;}
 </style>
 </head>
 <body>
@@ -291,6 +296,7 @@ function renderDashboard(){
 function renderMachines(){
   const types = [...new Set((DATA.machines||[]).map(m=>m.type))].filter(Boolean);
   const statuses = [...new Set((DATA.machines||[]).map(m=>m.status))].filter(Boolean);
+  machinePage = 1;
   $('#main').innerHTML = `
     <div class="panel">
       <div class="toolbar">
@@ -306,14 +312,18 @@ function renderMachines(){
         </tr></thead>
         <tbody id="machineRows"></tbody>
       </table></div>
+      <div class="pagination" id="machinePagination"></div>
     </div>
   `;
   $('#addMachineBtn').onclick = openMachineModal;
-  $('#searchSn').oninput = drawMachineRows;
-  $('#filterType').onchange = drawMachineRows;
-  $('#filterStatus').onchange = drawMachineRows;
+  $('#searchSn').oninput = ()=>{ machinePage=1; drawMachineRows(); };
+  $('#filterType').onchange = ()=>{ machinePage=1; drawMachineRows(); };
+  $('#filterStatus').onchange = ()=>{ machinePage=1; drawMachineRows(); };
   drawMachineRows();
 }
+
+const MACHINE_PAGE_SIZE = 100;
+let machinePage = 1;
 
 function drawMachineRows(){
   const search = ($('#searchSn').value||'').toLowerCase();
@@ -323,8 +333,14 @@ function drawMachineRows(){
   if(search) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(search));
   if(type) rows = rows.filter(m=>m.type===type);
   if(status) rows = rows.filter(m=>m.status===status);
-  rows = rows.slice(0, 500); // 前端效能保護，先只顯示前 500 筆符合條件的
-  $('#machineRows').innerHTML = rows.map(m=>`
+
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / MACHINE_PAGE_SIZE));
+  if(machinePage > totalPages) machinePage = totalPages;
+  const start = (machinePage-1) * MACHINE_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + MACHINE_PAGE_SIZE);
+
+  $('#machineRows').innerHTML = pageRows.map(m=>`
     <tr>
       <td>${fmt(m.sn)}</td><td>${fmt(m.type)}</td><td><span class="badge">${fmt(m.status)}</span></td>
       <td>${fmt(m.store_no)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
@@ -332,6 +348,29 @@ function drawMachineRows(){
       <td>${fmtDate(getField(m,'NID入庫（不良品）'))}</td>
       <td>${fmtDate(getField(m,'台灣入庫（不良品）'))}</td>
     </tr>`).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
+
+  renderMachinePagination(total, totalPages);
+}
+
+function renderMachinePagination(total, totalPages){
+  const el = $('#machinePagination');
+  if(!el) return;
+  const start = total===0 ? 0 : (machinePage-1)*MACHINE_PAGE_SIZE + 1;
+  const end = Math.min(machinePage*MACHINE_PAGE_SIZE, total);
+  el.innerHTML = `
+    <span class="page-info">共 ${total} 筆，顯示第 ${start}–${end} 筆</span>
+    <div class="page-controls">
+      <button class="btn secondary" id="pgFirst" ${machinePage<=1?'disabled':''}>« 第一頁</button>
+      <button class="btn secondary" id="pgPrev" ${machinePage<=1?'disabled':''}>‹ 上一頁</button>
+      <span class="page-num">第 ${machinePage} / ${totalPages} 頁</span>
+      <button class="btn secondary" id="pgNext" ${machinePage>=totalPages?'disabled':''}>下一頁 ›</button>
+      <button class="btn secondary" id="pgLast" ${machinePage>=totalPages?'disabled':''}>最後一頁 »</button>
+    </div>
+  `;
+  $('#pgFirst').onclick = ()=>{ machinePage=1; drawMachineRows(); };
+  $('#pgPrev').onclick = ()=>{ machinePage=Math.max(1,machinePage-1); drawMachineRows(); };
+  $('#pgNext').onclick = ()=>{ machinePage=machinePage+1; drawMachineRows(); };
+  $('#pgLast').onclick = ()=>{ machinePage=totalPages; drawMachineRows(); };
 }
 
 function renderInventory(){
