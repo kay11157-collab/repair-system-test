@@ -93,10 +93,10 @@
   .type-dot{background:#3B6FD1;}
   .status-pill-row{display:flex;flex-wrap:wrap;gap:8px;}
   .status-pill{
-    display:inline-flex;align-items:center;gap:6px;background:var(--brand-soft);color:var(--brand);
+    display:inline-flex;align-items:center;gap:6px;
     border-radius:100px;padding:6px 12px;font-size:12px;font-weight:600;
   }
-  .status-pill .dot{background:var(--brand);width:6px;height:6px;}
+  .status-pill .dot{width:6px;height:6px;}
   .status-pill b{font-size:14px;margin-left:2px;}
 
   .repair-layout{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start;}
@@ -189,6 +189,41 @@ const LS_KEY = 'repair_system_api_url';
 let API_URL = localStorage.getItem(LS_KEY) || '';
 let DATA = null;
 let currentTab = 'dashboard';
+
+// 固定的狀態顯示順序（所有類型都照這個順序排列，方便垂直比對）
+const STATUS_ORDER = [
+  'STORE', 'STORE - 異常', '台灣倉', '台灣維修中',
+  '在途 - 台灣 TO NID', '在途-NID TO 台灣',
+  'NID - 良品', 'NID - 待退回台灣', 'NLA - 良品'
+];
+
+// 每個狀態固定的顏色（背景色 / 文字色），全站統一使用
+const STATUS_COLORS = {
+  'STORE':              { bg:'#E6F0EA', fg:'#2F6F4E' }, // 綠
+  'STORE - 異常':        { bg:'#FBE0E0', fg:'#8A1F1F' }, // 深紅
+  '台灣倉':               { bg:'#E8F0FB', fg:'#2B5FA5' }, // 藍
+  '台灣維修中':            { bg:'#FBE7E7', fg:'#B23A3A' }, // 紅
+  '在途 - 台灣 TO NID':    { bg:'#FBEFDD', fg:'#B8752A' }, // 橙
+  '在途-NID TO 台灣':      { bg:'#FBEFDD', fg:'#B8752A' }, // 橙
+  'NID - 良品':           { bg:'#E1F5F0', fg:'#1F8A72' }, // 青
+  'NID - 待退回台灣':      { bg:'#F1E7FB', fg:'#7A3AB2' }, // 紫
+  'NLA - 良品':           { bg:'#EDEDED', fg:'#666666' }  // 灰
+};
+const DEFAULT_STATUS_COLOR = { bg:'#E6F0EA', fg:'#2F6F4E' };
+
+function statusColor(status){
+  return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
+}
+function statusBadgeHtml(status){
+  const c = statusColor(status);
+  return `<span class="badge" style="background:${c.bg};color:${c.fg};">${fmt(status)}</span>`;
+}
+function orderedStatuses(statusMap){
+  const keys = Object.keys(statusMap);
+  const ordered = STATUS_ORDER.filter(s=>keys.includes(s));
+  const rest = keys.filter(k=>!STATUS_ORDER.includes(k)).sort();
+  return ordered.concat(rest);
+}
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -301,10 +336,16 @@ function render(){
 function renderDashboard(){
   const s = computeStats();
   const typeBlocks = Object.keys(s.byType).map(type=>{
-    const statusEntries = Object.entries(s.byTypeStatus[type]||{});
-    const pills = statusEntries.map(([status,count])=>`
-      <span class="status-pill"><span class="dot"></span>${status}<b>${count}</b></span>
-    `).join('');
+    const statusMap = s.byTypeStatus[type]||{};
+    const pills = orderedStatuses(statusMap).map(status=>{
+      const count = statusMap[status];
+      const c = statusColor(status);
+      return `
+        <span class="status-pill" style="background:${c.bg};color:${c.fg};">
+          <span class="dot" style="background:${c.fg};"></span>${status}<b>${count}</b>
+        </span>
+      `;
+    }).join('');
     return `
       <div class="type-block">
         <div class="type-block-header"><span class="dot type-dot"></span>${type}<span class="type-total">共 ${s.byType[type]} 台</span></div>
@@ -329,7 +370,8 @@ function renderDashboard(){
 
 function renderMachines(){
   const types = [...new Set((DATA.machines||[]).map(m=>m.type))].filter(Boolean);
-  const statuses = [...new Set((DATA.machines||[]).map(m=>m.status))].filter(Boolean);
+  const statusSet = new Set((DATA.machines||[]).map(m=>m.status).filter(Boolean));
+  const statuses = STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!STATUS_ORDER.includes(s)).sort());
   machinePage = 1;
   $('#main').innerHTML = `
     <div class="panel">
@@ -376,7 +418,7 @@ function drawMachineRows(){
 
   $('#machineRows').innerHTML = pageRows.map(m=>`
     <tr>
-      <td>${fmt(m.sn)}</td><td>${fmt(m.type)}</td><td><span class="badge">${fmt(m.status)}</span></td>
+      <td>${fmt(m.sn)}</td><td>${fmt(m.type)}</td><td>${statusBadgeHtml(m.status)}</td>
       <td>${fmt(m.store_no)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
       <td>${fmtDate(getField(m,'機器損壞時間（NID出貨）'))}</td>
       <td>${fmtDate(getField(m,'NID入庫（不良品）'))}</td>
