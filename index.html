@@ -147,14 +147,15 @@
   .filter-pill.active{background:var(--pill-bg, var(--brand)); color:var(--pill-fg, #fff); border-color:transparent;}
   .filter-pill.type-pill.active{background:var(--brand);color:#fff;}
 
-  .timeline{border-left:2px solid var(--line);padding-left:16px;margin-left:6px;max-height:200px;overflow-y:auto;}
-  .tl-item{position:relative;padding-bottom:14px;}
-  .tl-item:last-child{padding-bottom:0;}
-  .tl-dot{position:absolute;left:-21px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 1px var(--brand);}
+  .timeline{max-height:260px;overflow-y:auto;}
+  .tl-block{margin-bottom:16px;}
+  .tl-block:last-child{margin-bottom:0;}
+  .tl-block-title{font-size:12px;font-weight:700;color:var(--brand);margin-bottom:8px;}
+  .tl-item{position:relative;padding-left:16px;padding-bottom:10px;border-left:2px solid var(--line);margin-left:2px;}
+  .tl-item:last-child{padding-bottom:0;border-left:2px solid transparent;}
+  .tl-dot{position:absolute;left:-6px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 1px var(--brand);}
   .tl-event{font-size:13px;font-weight:600;}
   .tl-meta{font-size:11px;color:var(--ink-soft);margin-top:2px;}
-  .timeline-add{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
-  .timeline-add input{flex:1;min-width:120px;}
 </style>
 </head>
 <body>
@@ -264,12 +265,6 @@
 
     <h4 style="margin:18px 0 10px;">機台生命週期時間軸</h4>
     <div id="detailTimeline" class="timeline"></div>
-    <div class="timeline-add">
-      <input type="text" id="tl_event" placeholder="事件名稱，例如：二次台灣出貨(良品)" style="flex:2;">
-      <input type="date" id="tl_date" style="flex:1;">
-      <input type="text" id="tl_note" placeholder="備註（可空白）" style="flex:1;">
-      <button class="btn secondary" id="tl_addBtn">＋ 新增事件</button>
-    </div>
 
     <h4 style="margin:18px 0 10px;">操作記錄</h4>
     <div class="table-wrap" style="max-height:220px;"><table>
@@ -557,27 +552,67 @@ function openDetailModal(sn){
   renderDetailLog(sn);
 
   // 生命週期時間軸
-  $('#tl_event').value = '';
-  $('#tl_date').value = '';
-  $('#tl_note').value = '';
   renderDetailTimeline(sn);
 
   $('#detailModal').classList.add('show');
 }
 
+// 掃描機台物件裡帶有「數字-欄位名稱」格式的欄位（例如 "2-NID入庫"），
+// 自動歸類成第幾次維修循環，不需要另外開分頁、不需要改變填寫習慣。
+function getMachineCycles(m){
+  const cycles = {};
+  for(const key in m){
+    const match = key.match(/^(\d+)-(.+)$/);
+    if(match){
+      const num = match[1], field = match[2].trim();
+      const val = m[key];
+      if(val === null || val === undefined || val === '') continue;
+      if(!cycles[num]) cycles[num] = [];
+      cycles[num].push({ field, val });
+    }
+  }
+  return cycles;
+}
+
+const CYCLE_1_FIELDS = ['機器損壞時間（NID出貨）','NID入庫（不良品）','台灣入庫（不良品）'];
+
 function renderDetailTimeline(sn){
-  const events = (DATA.machine_events||[]).filter(e=>e.sn===sn);
-  // 依日期排序（日期格式不一致時，字串排序也大致堪用，因為用的是 yyyy-mm-dd 或 yyyy/mm/dd）
-  events.sort((a,b)=> String(a.date||'').localeCompare(String(b.date||'')));
-  $('#detailTimeline').innerHTML = events.length ? events.map(e=>`
-    <div class="tl-item">
-      <div class="tl-dot"></div>
-      <div class="tl-content">
-        <div class="tl-event">${fmt(e.event)}</div>
-        <div class="tl-meta">${fmtDate(e.date)}${e.note ? '・' + fmt(e.note) : ''}</div>
-      </div>
+  const m = (DATA.machines||[]).find(x=>x.sn===sn);
+  if(!m){ $('#detailTimeline').innerHTML = '<div class="empty">找不到機台資料</div>'; return; }
+
+  const blocks = [];
+
+  // 第一次循環：既有的 3 個欄位（不用前綴）
+  const cycle1 = CYCLE_1_FIELDS
+    .map(f=>({ field:f, val:getField(m,f) }))
+    .filter(x=>x.val !== null && x.val !== undefined && x.val !== '');
+  if(cycle1.length) blocks.push({ label:'第 1 次循環', items:cycle1 });
+
+  // 第 2 次以後：自動偵測「數字-欄位名稱」格式的欄位
+  const cycles = getMachineCycles(m);
+  Object.keys(cycles).sort((a,b)=>Number(a)-Number(b)).forEach(num=>{
+    blocks.push({ label:`第 ${num} 次循環`, items:cycles[num] });
+  });
+
+  if(!blocks.length){
+    $('#detailTimeline').innerHTML = '<div class="empty">尚無生命週期紀錄</div>';
+    return;
+  }
+
+  $('#detailTimeline').innerHTML = blocks.map(block=>`
+    <div class="tl-block">
+      <div class="tl-block-title">${block.label}</div>
+      ${block.items.map(it=>`
+        <div class="tl-item">
+          <div class="tl-dot"></div>
+          <div class="tl-content">
+            <div class="tl-event">${fmt(it.field)}</div>
+            <div class="tl-meta">${/^\d{4}-\d{2}-\d{2}/.test(String(it.val)) ? fmtDate(it.val) : fmt(it.val)}</div>
+          </div>
+        </div>
+      `).join('')}
     </div>
-  `).join('') : '<div class="empty">尚無生命週期紀錄</div>';
+  `).join('');
 }
 
 function renderDetailLog(sn){
@@ -791,25 +826,6 @@ $('#d_issueSaveBtn').onclick = async ()=>{
     openDetailModal(currentDetailSn);
   }catch(err){
     $('#detailMsg').innerHTML = '<div class="msg error">更新問題描述失敗：'+err.message+'</div>';
-  }
-};
-
-$('#tl_addBtn').onclick = async ()=>{
-  const sn = currentDetailSn;
-  const event = $('#tl_event').value.trim();
-  const date = $('#tl_date').value;
-  const note = $('#tl_note').value;
-  if(!event || !date){
-    $('#detailMsg').innerHTML = '<div class="msg error">請填寫事件名稱與日期</div>';
-    return;
-  }
-  try{
-    await callApi({ action:'addMachineEvent', data:{ sn, event, date, note } });
-    await fetchData();
-    openDetailModal(sn);
-    $('#detailMsg').innerHTML = '<div class="msg ok">已新增一筆生命週期事件</div>';
-  }catch(err){
-    $('#detailMsg').innerHTML = '<div class="msg error">新增失敗：'+err.message+'</div>';
   }
 };
 
