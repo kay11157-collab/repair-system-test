@@ -285,6 +285,12 @@ const STATUS_COLORS = {
 };
 const DEFAULT_STATUS_COLOR = { bg:'#E6F0EA', fg:'#2F6F4E' };
 
+// 機台詳情視窗裡「狀態進度條」用的順序，代表實際的維修流程（跟總覽頁的排序目的不同）
+const STEPPER_ORDER = [
+  '台灣倉', '在途 - 台灣 TO NID', 'NID - 良品', 'NLA - 良品',
+  'STORE', 'STORE - 異常', 'NID - 待退回台灣', '在途-NID TO 台灣', '台灣維修中'
+];
+
 function statusColor(status){
   return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
 }
@@ -515,8 +521,9 @@ function openDetailModal(sn){
   $('#detailModalTitle').textContent = sn;
   $('#detailMsg').innerHTML = '';
 
-  // 狀態進度條
-  const allStatuses = STATUS_ORDER.filter(s=> (DATA.machines||[]).some(x=>x.status===s) || s===m.status);
+  // 狀態進度條（固定照實際維修流程順序，不是照資料出現順序）
+  const allStatuses = STEPPER_ORDER.slice();
+  if(m.status && !allStatuses.includes(m.status)) allStatuses.push(m.status);
   $('#detailStepper').innerHTML = allStatuses.map((s,i)=>{
     const active = s === m.status;
     const c = statusColor(s);
