@@ -39,7 +39,7 @@
     color:var(--ink-soft);border-bottom:2px solid transparent;font-weight:600;
   }
   nav button.active{color:var(--brand);border-bottom-color:var(--brand);}
-  main{padding:24px;max-width:1200px;margin:0 auto;}
+  main{padding:24px 32px;max-width:1800px;margin:0 auto;}
   .grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
   .stat-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
   .stat-card .label{font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
@@ -449,36 +449,27 @@ function renderDashboard(){
       <h3 style="margin-top:0;">機台進度追蹤</h3>
       <div class="toolbar">
         <input type="text" id="trackSearch" placeholder="搜尋機台序號 (sn)">
+        <span class="page-info" id="trackCount"></span>
       </div>
-      <div class="table-wrap"><table>
+      <div class="table-wrap" style="max-height:70vh;"><table>
         <thead><tr>
           <th>機台 SN</th><th>類型</th><th>狀態</th><th>店號</th><th>問題描述</th><th>最後修改時間</th><th>最後更新者</th><th>操作</th>
         </tr></thead>
         <tbody id="trackRows"></tbody>
       </table></div>
-      <div class="pagination" id="trackPagination"></div>
     </div>
   `;
-  $('#trackSearch').oninput = ()=>{ trackPage=1; drawTrackRows(); };
-  trackPage = 1;
+  $('#trackSearch').oninput = drawTrackRows;
   drawTrackRows();
 }
-
-const TRACK_PAGE_SIZE = 50;
-let trackPage = 1;
 
 function drawTrackRows(){
   const q = ($('#trackSearch').value||'').toLowerCase();
   let rows = DATA.machines || [];
   if(q) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(q));
 
-  const total = rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / TRACK_PAGE_SIZE));
-  if(trackPage > totalPages) trackPage = totalPages;
-  const start = (trackPage-1) * TRACK_PAGE_SIZE;
-  const pageRows = rows.slice(start, start + TRACK_PAGE_SIZE);
-
-  $('#trackRows').innerHTML = pageRows.map(m=>`
+  $('#trackCount').textContent = `共 ${rows.length} 筆`;
+  $('#trackRows').innerHTML = rows.map(m=>`
     <tr>
       <td>${fmt(m.sn)}</td>
       <td><span class="status-pill" style="background:#E8F0FB;color:#2B5FA5;"><span class="dot" style="background:#2B5FA5;"></span>${fmt(m.type)}</span></td>
@@ -489,29 +480,6 @@ function drawTrackRows(){
       <td>${fmt(m.updated_by)}</td>
       <td><button class="btn secondary" onclick="openDetailModal('${m.sn}')">詳情</button></td>
     </tr>`).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
-
-  renderTrackPagination(total, totalPages);
-}
-
-function renderTrackPagination(total, totalPages){
-  const el = $('#trackPagination');
-  if(!el) return;
-  const start = total===0 ? 0 : (trackPage-1)*TRACK_PAGE_SIZE + 1;
-  const end = Math.min(trackPage*TRACK_PAGE_SIZE, total);
-  el.innerHTML = `
-    <span class="page-info">共 ${total} 筆，顯示第 ${start}–${end} 筆</span>
-    <div class="page-controls">
-      <button class="btn secondary" id="tpgFirst" ${trackPage<=1?'disabled':''}>« 第一頁</button>
-      <button class="btn secondary" id="tpgPrev" ${trackPage<=1?'disabled':''}>‹ 上一頁</button>
-      <span class="page-num">第 ${trackPage} / ${totalPages} 頁</span>
-      <button class="btn secondary" id="tpgNext" ${trackPage>=totalPages?'disabled':''}>下一頁 ›</button>
-      <button class="btn secondary" id="tpgLast" ${trackPage>=totalPages?'disabled':''}>最後一頁 »</button>
-    </div>
-  `;
-  $('#tpgFirst').onclick = ()=>{ trackPage=1; drawTrackRows(); };
-  $('#tpgPrev').onclick = ()=>{ trackPage=Math.max(1,trackPage-1); drawTrackRows(); };
-  $('#tpgNext').onclick = ()=>{ trackPage=trackPage+1; drawTrackRows(); };
-  $('#tpgLast').onclick = ()=>{ trackPage=totalPages; drawTrackRows(); };
 }
 
 function openDetailModal(sn){
@@ -575,7 +543,6 @@ function renderMachines(){
   const types = [...new Set((DATA.machines||[]).map(m=>m.type))].filter(Boolean);
   const statusSet = new Set((DATA.machines||[]).map(m=>m.status).filter(Boolean));
   const statuses = STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!STATUS_ORDER.includes(s)).sort());
-  machinePage = 1;
   $('#main').innerHTML = `
     <div class="panel">
       <div class="toolbar">
@@ -583,26 +550,23 @@ function renderMachines(){
         <select id="filterType"><option value="">全部類型</option>${types.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
         <select id="filterStatus"><option value="">全部狀態</option>${statuses.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
         <button class="btn" id="addMachineBtn">＋ 新增機台</button>
+        <span class="page-info" id="machineCount"></span>
       </div>
-      <div class="table-wrap"><table>
+      <div class="table-wrap" style="max-height:70vh;"><table>
         <thead><tr>
           <th>sn</th><th>type</th><th>status</th><th>store_no</th><th>issue</th><th>owner</th>
           <th>機器損壞時間（NID出貨）</th><th>NID入庫（不良品）</th><th>台灣入庫（不良品）</th>
         </tr></thead>
         <tbody id="machineRows"></tbody>
       </table></div>
-      <div class="pagination" id="machinePagination"></div>
     </div>
   `;
   $('#addMachineBtn').onclick = openMachineModal;
-  $('#searchSn').oninput = ()=>{ machinePage=1; drawMachineRows(); };
-  $('#filterType').onchange = ()=>{ machinePage=1; drawMachineRows(); };
-  $('#filterStatus').onchange = ()=>{ machinePage=1; drawMachineRows(); };
+  $('#searchSn').oninput = drawMachineRows;
+  $('#filterType').onchange = drawMachineRows;
+  $('#filterStatus').onchange = drawMachineRows;
   drawMachineRows();
 }
-
-const MACHINE_PAGE_SIZE = 100;
-let machinePage = 1;
 
 function drawMachineRows(){
   const search = ($('#searchSn').value||'').toLowerCase();
@@ -613,13 +577,8 @@ function drawMachineRows(){
   if(type) rows = rows.filter(m=>m.type===type);
   if(status) rows = rows.filter(m=>m.status===status);
 
-  const total = rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / MACHINE_PAGE_SIZE));
-  if(machinePage > totalPages) machinePage = totalPages;
-  const start = (machinePage-1) * MACHINE_PAGE_SIZE;
-  const pageRows = rows.slice(start, start + MACHINE_PAGE_SIZE);
-
-  $('#machineRows').innerHTML = pageRows.map(m=>`
+  $('#machineCount').textContent = `共 ${rows.length} 筆`;
+  $('#machineRows').innerHTML = rows.map(m=>`
     <tr>
       <td>${fmt(m.sn)}</td><td>${fmt(m.type)}</td><td>${statusBadgeHtml(m.status)}</td>
       <td>${fmt(m.store_no)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
@@ -627,29 +586,6 @@ function drawMachineRows(){
       <td>${fmtDate(getField(m,'NID入庫（不良品）'))}</td>
       <td>${fmtDate(getField(m,'台灣入庫（不良品）'))}</td>
     </tr>`).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
-
-  renderMachinePagination(total, totalPages);
-}
-
-function renderMachinePagination(total, totalPages){
-  const el = $('#machinePagination');
-  if(!el) return;
-  const start = total===0 ? 0 : (machinePage-1)*MACHINE_PAGE_SIZE + 1;
-  const end = Math.min(machinePage*MACHINE_PAGE_SIZE, total);
-  el.innerHTML = `
-    <span class="page-info">共 ${total} 筆，顯示第 ${start}–${end} 筆</span>
-    <div class="page-controls">
-      <button class="btn secondary" id="pgFirst" ${machinePage<=1?'disabled':''}>« 第一頁</button>
-      <button class="btn secondary" id="pgPrev" ${machinePage<=1?'disabled':''}>‹ 上一頁</button>
-      <span class="page-num">第 ${machinePage} / ${totalPages} 頁</span>
-      <button class="btn secondary" id="pgNext" ${machinePage>=totalPages?'disabled':''}>下一頁 ›</button>
-      <button class="btn secondary" id="pgLast" ${machinePage>=totalPages?'disabled':''}>最後一頁 »</button>
-    </div>
-  `;
-  $('#pgFirst').onclick = ()=>{ machinePage=1; drawMachineRows(); };
-  $('#pgPrev').onclick = ()=>{ machinePage=Math.max(1,machinePage-1); drawMachineRows(); };
-  $('#pgNext').onclick = ()=>{ machinePage=machinePage+1; drawMachineRows(); };
-  $('#pgLast').onclick = ()=>{ machinePage=totalPages; drawMachineRows(); };
 }
 
 function renderInventory(){
