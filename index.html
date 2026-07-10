@@ -351,6 +351,24 @@ function getField(obj, key){
   return null;
 }
 
+// 搜尋框用的 debounce：使用者停止打字一小段時間後才重新畫表格，
+// 避免資料量大時每敲一個字就整張表重新 render 造成卡頓。
+function debounce(fn, wait=250){
+  let timer = null;
+  return function(...args){
+    clearTimeout(timer);
+    timer = setTimeout(()=>fn.apply(this,args), wait);
+  };
+}
+
+// 產生跟後端 nowStr() 格式一致的本機時間字串，用於新增/更新後的「樂觀更新」畫面顯示，
+// 之後背景資料重新整理時會被伺服器實際時間覆蓋過去。
+function clientNowStr(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 /* ---------- API ---------- */
 
 async function fetchData(){
@@ -387,6 +405,35 @@ function settingValues(key){
   return (DATA.settings||[]).filter(r=>r.key===key).map(r=>r.value);
 }
 
+// 有些機台會經過第 2、第 3…次維修循環，每次循環出貨到 STORE 時可能會換一個新店號
+// （Sheet 裡對應欄位例如「2-店號」「3-店號」）。這裡統一算出：
+// 1. 目前應該顯示的「有效店號」：以編號最大、且有填值的那個「N-店號」為準，
+//    找不到就退回最原始的 store_no。
+// 2. 這台機器目前跑到第幾次循環（沒有任何「N-」欄位有值就是第 1 次）。
+function getMachineCycleInfo(m){
+  const cycles = getMachineCycles(m); // { '2': [{field,val}, ...], '3': [...] }
+  let cycleCount = 1;
+  let effectiveStoreNo = m.store_no;
+
+  Object.keys(cycles).map(Number).sort((a,b)=>a-b).forEach(num=>{
+    const items = cycles[num];
+    const hasData = items.some(it=>it.val!==null && it.val!==undefined && it.val!=='');
+    if(hasData) cycleCount = Math.max(cycleCount, num);
+
+    const storeItem = items.find(it=>it.field==='店號');
+    if(storeItem && storeItem.val!==null && storeItem.val!==undefined && storeItem.val!==''){
+      effectiveStoreNo = storeItem.val;
+    }
+  });
+
+  return { cycleCount, effectiveStoreNo, isRepeat: cycleCount > 1 };
+}
+
+function cycleBadgeHtml(info){
+  if(!info.isRepeat) return '';
+  return ` <span class="badge" style="background:#F1E7FB;color:#7A3AB2;">第${info.cycleCount}次循環</span>`;
+}
+
 /* ---------- stats ---------- */
 
 function computeStats(){
@@ -396,8 +443,9 @@ function computeStats(){
   const storeNos = new Set();
   machines.forEach(m=>{
     if(m.status === 'STORE' || m.status === 'STORE - 異常'){
-      const n = Number(m.store_no);
-      if(m.store_no !== null && !isNaN(n)) storeNos.add(n);
+      const effective = getMachineCycleInfo(m).effectiveStoreNo;
+      const n = Number(effective);
+      if(effective !== null && effective !== undefined && effective !== '' && !isNaN(n)) storeNos.add(n);
     }
   });
 
@@ -481,7 +529,7 @@ function renderDashboard(){
       </table></div>
     </div>
   `;
-  $('#trackSearch').oninput = drawTrackRows;
+  $('#trackSearch').oninput = debounce(drawTrackRows);
   drawTrackRows();
 }
 
@@ -491,17 +539,20 @@ function drawTrackRows(){
   if(q) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(q));
 
   $('#trackCount').textContent = `共 ${rows.length} 筆`;
-  $('#trackRows').innerHTML = rows.map(m=>`
+  $('#trackRows').innerHTML = rows.map(m=>{
+    const info = getMachineCycleInfo(m);
+    return `
     <tr>
-      <td>${fmt(m.sn)}</td>
+      <td>${fmt(m.sn)}${cycleBadgeHtml(info)}</td>
       <td><span class="status-pill" style="background:#E8F0FB;color:#2B5FA5;"><span class="dot" style="background:#2B5FA5;"></span>${fmt(m.type)}</span></td>
       <td>${statusBadgeHtml(m.status)}</td>
-      <td>${fmt(m.store_no)}</td>
+      <td>${fmt(info.effectiveStoreNo)}</td>
       <td>${fmt(m.issue)}</td>
       <td>${fmt(m.updated_at)}</td>
       <td>${fmt(m.updated_by)}</td>
       <td><button class="btn secondary" onclick="openDetailModal('${m.sn}')">詳情</button></td>
-    </tr>`).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
 }
 
 function openDetailModal(sn){
@@ -527,9 +578,11 @@ function openDetailModal(sn){
   }).join('');
 
   // 基本資訊卡
+  const cycleInfo = getMachineCycleInfo(m);
   $('#detailInfoGrid').innerHTML = `
     <div class="info-card"><div class="info-label">類型</div><div class="info-value">${fmt(m.type)}</div></div>
     <div class="info-card"><div class="info-label">目前狀態</div><div class="info-value">${statusBadgeHtml(m.status)}</div></div>
+    <div class="info-card"><div class="info-label">店號${cycleInfo.isRepeat?`（第${cycleInfo.cycleCount}次循環最新店號）`:''}</div><div class="info-value">${fmt(cycleInfo.effectiveStoreNo)}</div></div>
     <div class="info-card"><div class="info-label">負責人</div><div class="info-value">${fmt(m.owner)}</div></div>
     <div class="info-card"><div class="info-label">批次</div><div class="info-value">${fmt(m.batch)}</div></div>
     <div class="info-card"><div class="info-label">最後修改時間</div><div class="info-value">${fmt(m.updated_at)}</div></div>
@@ -624,10 +677,13 @@ function renderDetailLog(sn){
 
 let machineFilterType = '';
 let machineFilterStatus = '';
+let machinePage = 1;
+const MACHINE_PAGE_SIZE = 50; // 每頁顯示筆數，資料量大時避免整表塞進 DOM 造成卡頓
 
 function renderMachines(){
   machineFilterType = '';
   machineFilterStatus = '';
+  machinePage = 1;
   const types = [...new Set((DATA.machines||[]).map(m=>m.type))].filter(Boolean);
   const statusSet = new Set((DATA.machines||[]).map(m=>m.status).filter(Boolean));
   const statuses = STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!STATUS_ORDER.includes(s)).sort());
@@ -661,16 +717,27 @@ function renderMachines(){
         </tr></thead>
         <tbody id="machineRows"></tbody>
       </table></div>
+      <div class="pagination">
+        <span class="page-info" id="machinePageInfo"></span>
+        <div class="page-controls">
+          <button class="btn secondary" id="machinePrevPage">上一頁</button>
+          <span class="page-num" id="machinePageNum"></span>
+          <button class="btn secondary" id="machineNextPage">下一頁</button>
+        </div>
+      </div>
     </div>
   `;
   $('#addMachineBtn').onclick = openMachineModal;
-  $('#searchSn').oninput = drawMachineRows;
-  $('#searchStoreNo').oninput = drawMachineRows;
-  $('#clearStoreNo').onclick = ()=>{ $('#searchStoreNo').value=''; drawMachineRows(); };
+  $('#searchSn').oninput = debounce(()=>{ machinePage=1; drawMachineRows(); });
+  $('#searchStoreNo').oninput = debounce(()=>{ machinePage=1; drawMachineRows(); });
+  $('#clearStoreNo').onclick = ()=>{ $('#searchStoreNo').value=''; machinePage=1; drawMachineRows(); };
+  $('#machinePrevPage').onclick = ()=>{ if(machinePage>1){ machinePage--; drawMachineRows(); } };
+  $('#machineNextPage').onclick = ()=>{ machinePage++; drawMachineRows(); };
 
   $$('#statusFilterRow .filter-pill').forEach(btn=>{
     btn.onclick = ()=>{
       machineFilterStatus = btn.dataset.status;
+      machinePage = 1;
       $$('#statusFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
       drawMachineRows();
     };
@@ -678,6 +745,7 @@ function renderMachines(){
   $$('#typeFilterRow .filter-pill').forEach(btn=>{
     btn.onclick = ()=>{
       machineFilterType = btn.dataset.type;
+      machinePage = 1;
       $$('#typeFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
       drawMachineRows();
     };
@@ -691,19 +759,38 @@ function drawMachineRows(){
   const storeNoSearch = ($('#searchStoreNo').value||'').toLowerCase();
   let rows = DATA.machines || [];
   if(search) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(search));
-  if(storeNoSearch) rows = rows.filter(m=>String(m.store_no||'').toLowerCase().includes(storeNoSearch));
+  if(storeNoSearch) rows = rows.filter(m=>{
+    // 同時比對原始 store_no 跟二次出貨後的新店號，不然搜尋新店號會找不到機台
+    const info = getMachineCycleInfo(m);
+    return String(m.store_no||'').toLowerCase().includes(storeNoSearch)
+      || String(info.effectiveStoreNo||'').toLowerCase().includes(storeNoSearch);
+  });
   if(machineFilterType) rows = rows.filter(m=>m.type===machineFilterType);
   if(machineFilterStatus) rows = rows.filter(m=>m.status===machineFilterStatus);
 
-  $('#machineCount').textContent = `共 ${rows.length} 筆`;
-  $('#machineRows').innerHTML = rows.map(m=>`
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / MACHINE_PAGE_SIZE));
+  if(machinePage > totalPages) machinePage = totalPages;
+  const start = (machinePage-1) * MACHINE_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + MACHINE_PAGE_SIZE);
+
+  $('#machineCount').textContent = `共 ${total} 筆`;
+  $('#machinePageInfo').textContent = total ? `第 ${start+1}–${Math.min(start+MACHINE_PAGE_SIZE,total)} 筆・共 ${total} 筆` : '';
+  $('#machinePageNum').textContent = `${machinePage} / ${totalPages}`;
+  $('#machinePrevPage').disabled = machinePage<=1;
+  $('#machineNextPage').disabled = machinePage>=totalPages;
+
+  $('#machineRows').innerHTML = pageRows.map(m=>{
+    const info = getMachineCycleInfo(m);
+    return `
     <tr>
-      <td>${fmt(m.sn)}</td><td>${fmt(m.type)}</td><td>${statusBadgeHtml(m.status)}</td>
-      <td>${fmt(m.store_no)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
+      <td>${fmt(m.sn)}${cycleBadgeHtml(info)}</td><td>${fmt(m.type)}</td><td>${statusBadgeHtml(m.status)}</td>
+      <td>${fmt(info.effectiveStoreNo)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
       <td>${fmtDate(getField(m,'機器損壞時間（NID出貨）'))}</td>
       <td>${fmtDate(getField(m,'NID入庫（不良品）'))}</td>
       <td>${fmtDate(getField(m,'台灣入庫（不良品）'))}</td>
-    </tr>`).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
 }
 
 function renderInventory(){
@@ -784,8 +871,13 @@ $('#machineSave').onclick = async ()=>{
   };
   try{
     await callApi({ action:'addMachine', data });
+    // 樂觀更新：後端已寫入成功，直接把這筆機台加進本地資料並重畫畫面，
+    // 不用整包重新呼叫 fetchData()（那會把 7 個分頁全部重抓一次）。
+    const now = clientNowStr();
+    DATA.machines = DATA.machines || [];
+    DATA.machines.push(Object.assign({}, data, { created_at: now, updated_at: now, updated_by: null, batch: null }));
     $('#machineModal').classList.remove('show');
-    await fetchData();
+    $('#statusLine').textContent = '已連線・共 ' + DATA.machines.length + ' 筆機台資料';
     currentTab='machines'; setActiveTab('machines'); render();
   }catch(err){
     $('#machineMsg').innerHTML = '<div class="msg error">新增失敗：'+err.message+'</div>';
@@ -818,11 +910,19 @@ let currentDetailSn = null;
 $('#d_issueEditBtn').onclick = ()=>{
   $('#d_issueEditRow').style.display = 'block';
 };
+// 找出本地 DATA.machines 裡對應 sn 的機台物件並就地合併欄位，
+// 讓畫面立刻反映最新狀態，不用每次都整包重新呼叫 fetchData()。
+function patchMachineLocal(sn, patch){
+  const m = (DATA.machines||[]).find(x=>x.sn===sn);
+  if(m) Object.assign(m, patch);
+  return m;
+}
+
 $('#d_issueSaveBtn').onclick = async ()=>{
   const newIssue = $('#d_issueInput').value;
   try{
     await callApi({ action:'updateMachine', sn: currentDetailSn, data:{ issue: newIssue } });
-    await fetchData();
+    patchMachineLocal(currentDetailSn, { issue: newIssue, updated_at: clientNowStr() });
     openDetailModal(currentDetailSn);
   }catch(err){
     $('#detailMsg').innerHTML = '<div class="msg error">更新問題描述失敗：'+err.message+'</div>';
@@ -839,7 +939,10 @@ $('#d_updateBtn').onclick = async ()=>{
   try{
     await callApi({ action:'updateMachine', sn: sn, data:{ status: newStatus }, operator: operator || undefined });
     await callApi({ action:'addMachineLog', data:{ sn: sn, step: newStatus, note: note, parts: parts, operator: operator } });
-    await fetchData();
+    const now = clientNowStr();
+    patchMachineLocal(sn, { status: newStatus, updated_at: now, updated_by: operator || undefined });
+    DATA.machine_log = DATA.machine_log || [];
+    DATA.machine_log.push({ sn: sn, step: newStatus, note: note, parts: parts, operator: operator, timestamp: now });
     openDetailModal(sn);
     $('#detailMsg').innerHTML = '<div class="msg ok">已更新狀態並記錄操作</div>';
   }catch(err){
