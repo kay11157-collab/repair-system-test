@@ -107,6 +107,9 @@
   .low-stock-name{font-size:13px;font-weight:600;}
   .low-stock-meta{font-size:11px;color:var(--ink-soft);margin:2px 0 4px;}
   .low-stock-qty{font-size:12px;color:var(--ink-soft);}
+  .detail-table{width:100%;border-collapse:collapse;}
+  .detail-table td{padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top;}
+  .detail-table .detail-label{color:var(--ink-soft);width:40%;font-weight:600;}
 </style>
 </head>
 <body>
@@ -180,6 +183,17 @@
     <div class="modal-actions">
       <button class="btn secondary" id="machineCancel">取消</button>
       <button class="btn" id="machineSave">新增</button>
+    </div>
+  </div>
+</div>
+
+<!-- 機台詳情 modal -->
+<div class="modal-backdrop" id="detailModal">
+  <div class="modal" style="max-width:560px;">
+    <h3 id="detailModalTitle">機台詳情</h3>
+    <div id="detailModalBody"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="detailModalClose">關閉</button>
     </div>
   </div>
 </div>
@@ -365,7 +379,83 @@ function renderDashboard(){
       <h3 style="margin-top:0;">各狀態數量</h3>
       ${typeBlocks}
     </div>
+    <div class="panel">
+      <h3 style="margin-top:0;">機台進度追蹤</h3>
+      <div class="toolbar">
+        <input type="text" id="trackSearch" placeholder="搜尋機台序號 (sn)">
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>機台 SN</th><th>類型</th><th>狀態</th><th>問題描述</th><th>最後修改時間</th><th>最後更新者</th><th>操作</th>
+        </tr></thead>
+        <tbody id="trackRows"></tbody>
+      </table></div>
+      <div class="pagination" id="trackPagination"></div>
+    </div>
   `;
+  $('#trackSearch').oninput = ()=>{ trackPage=1; drawTrackRows(); };
+  trackPage = 1;
+  drawTrackRows();
+}
+
+const TRACK_PAGE_SIZE = 50;
+let trackPage = 1;
+
+function drawTrackRows(){
+  const q = ($('#trackSearch').value||'').toLowerCase();
+  let rows = DATA.machines || [];
+  if(q) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(q));
+
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / TRACK_PAGE_SIZE));
+  if(trackPage > totalPages) trackPage = totalPages;
+  const start = (trackPage-1) * TRACK_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + TRACK_PAGE_SIZE);
+
+  $('#trackRows').innerHTML = pageRows.map(m=>`
+    <tr>
+      <td>${fmt(m.sn)}</td>
+      <td><span class="status-pill" style="background:#E8F0FB;color:#2B5FA5;"><span class="dot" style="background:#2B5FA5;"></span>${fmt(m.type)}</span></td>
+      <td>${statusBadgeHtml(m.status)}</td>
+      <td>${fmt(m.issue)}</td>
+      <td>${fmt(m.updated_at)}</td>
+      <td>${fmt(m.updated_by)}</td>
+      <td><button class="btn secondary" onclick="openDetailModal('${m.sn}')">詳情</button></td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">沒有符合條件的機台</td></tr>';
+
+  renderTrackPagination(total, totalPages);
+}
+
+function renderTrackPagination(total, totalPages){
+  const el = $('#trackPagination');
+  if(!el) return;
+  const start = total===0 ? 0 : (trackPage-1)*TRACK_PAGE_SIZE + 1;
+  const end = Math.min(trackPage*TRACK_PAGE_SIZE, total);
+  el.innerHTML = `
+    <span class="page-info">共 ${total} 筆，顯示第 ${start}–${end} 筆</span>
+    <div class="page-controls">
+      <button class="btn secondary" id="tpgFirst" ${trackPage<=1?'disabled':''}>« 第一頁</button>
+      <button class="btn secondary" id="tpgPrev" ${trackPage<=1?'disabled':''}>‹ 上一頁</button>
+      <span class="page-num">第 ${trackPage} / ${totalPages} 頁</span>
+      <button class="btn secondary" id="tpgNext" ${trackPage>=totalPages?'disabled':''}>下一頁 ›</button>
+      <button class="btn secondary" id="tpgLast" ${trackPage>=totalPages?'disabled':''}>最後一頁 »</button>
+    </div>
+  `;
+  $('#tpgFirst').onclick = ()=>{ trackPage=1; drawTrackRows(); };
+  $('#tpgPrev').onclick = ()=>{ trackPage=Math.max(1,trackPage-1); drawTrackRows(); };
+  $('#tpgNext').onclick = ()=>{ trackPage=trackPage+1; drawTrackRows(); };
+  $('#tpgLast').onclick = ()=>{ trackPage=totalPages; drawTrackRows(); };
+}
+
+function openDetailModal(sn){
+  const m = (DATA.machines||[]).find(x=>x.sn===sn);
+  if(!m) return;
+  const rows = Object.keys(m).map(k=>`
+    <tr><td class="detail-label">${k}</td><td>${fmt(m[k])}</td></tr>
+  `).join('');
+  $('#detailModalTitle').textContent = '機台詳情 — ' + sn;
+  $('#detailModalBody').innerHTML = `<table class="detail-table">${rows}</table>`;
+  $('#detailModal').classList.add('show');
 }
 
 function renderMachines(){
@@ -473,11 +563,12 @@ function renderInventory(){
 function renderRepair(){
   const rows = DATA.repair_log || [];
   const cols = ['NO','機器狀態','機器編號','店號','問題回報','案件編號','NID寄出日期','入芳苑日期'];
+  const dateCols = ['NID寄出日期','入芳苑日期'];
   $('#main').innerHTML = `
     <div class="panel">
       <div class="table-wrap"><table>
         <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
-        <tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td>${fmt(getField(r,c))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">目前沒有維修紀錄</td></tr>`}</tbody>
+        <tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td>${dateCols.includes(c) ? fmtDate(getField(r,c)) : fmt(getField(r,c))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">目前沒有維修紀錄</td></tr>`}</tbody>
       </table></div>
     </div>
   `;
@@ -550,6 +641,9 @@ $('#apiSave').onclick = async ()=>{
   $('#apiModal').classList.remove('show');
   await fetchData();
 };
+
+$('#detailModalClose').onclick = ()=> $('#detailModal').classList.remove('show');
+$('#detailModal').addEventListener('click', (e)=>{ if(e.target.id==='detailModal') $('#detailModal').classList.remove('show'); });
 
 /* ---------- tabs ---------- */
 
