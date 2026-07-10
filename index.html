@@ -110,6 +110,33 @@
   .detail-table{width:100%;border-collapse:collapse;}
   .detail-table td{padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top;}
   .detail-table .detail-label{color:var(--ink-soft);width:40%;font-weight:600;}
+
+  .detail-modal{max-width:640px;}
+  .detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .modal-close{border:none;background:transparent;font-size:18px;cursor:pointer;color:var(--ink-soft);line-height:1;}
+  .modal-close:hover{color:var(--ink);}
+
+  .stepper{display:flex;align-items:flex-start;overflow-x:auto;padding:6px 2px 14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
+  .step{display:flex;flex-direction:column;align-items:center;min-width:64px;flex-shrink:0;}
+  .step-circle{
+    width:28px;height:28px;border-radius:50%;background:var(--bg);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--ink-soft);
+  }
+  .step-active .step-circle{border:none;}
+  .step-label{font-size:10px;color:var(--ink-soft);text-align:center;margin-top:6px;white-space:nowrap;}
+  .step-active .step-label{color:var(--ink);font-weight:700;}
+  .step-line{width:24px;height:1px;background:var(--line);margin:13px 2px 0;flex-shrink:0;}
+
+  .detail-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+  .info-card{background:var(--bg);border-radius:8px;padding:10px 12px;}
+  .info-label{font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
+  .info-value{font-size:14px;font-weight:600;}
+
+  .update-status-box{background:var(--brand-soft);border-radius:10px;padding:16px;margin-bottom:16px;}
+  .update-status-box .field label{color:var(--brand);}
+
+  .issue-box{background:var(--bg);border-radius:10px;padding:14px 16px;}
+  .issue-header{display:flex;justify-content:space-between;align-items:center;}
 </style>
 </head>
 <body>
@@ -189,11 +216,44 @@
 
 <!-- 機台詳情 modal -->
 <div class="modal-backdrop" id="detailModal">
-  <div class="modal" style="max-width:560px;">
-    <h3 id="detailModalTitle">機台詳情</h3>
-    <div id="detailModalBody"></div>
+  <div class="modal detail-modal">
+    <div class="detail-header">
+      <h3 id="detailModalTitle" style="margin:0;">機台詳情</h3>
+      <button class="modal-close" id="detailModalClose">✕</button>
+    </div>
+    <div class="stepper" id="detailStepper"></div>
+    <div class="detail-info-grid" id="detailInfoGrid"></div>
+
+    <div class="update-status-box">
+      <h4 style="margin:0 0 12px;color:var(--brand);">更新狀態</h4>
+      <div class="field"><label>切換狀態</label><select id="d_status"></select></div>
+      <div class="field"><label>操作人員</label><select id="d_operator"><option value="">請選擇</option></select></div>
+      <div class="field"><label>備註（本次操作）</label><input type="text" id="d_note" placeholder="填寫本步驟的操作備註"></div>
+      <div class="field"><label>更換零件（可空白）</label><input type="text" id="d_parts" placeholder="例如：驅動模組 A × 1"></div>
+    </div>
+
+    <div class="issue-box">
+      <div class="issue-header">
+        <span style="font-weight:700;">問題描述</span>
+        <button class="btn secondary" id="d_issueEditBtn">編輯</button>
+      </div>
+      <div id="d_issueText" style="margin-top:8px;font-size:13px;color:var(--ink);"></div>
+      <div id="d_issueEditRow" style="display:none;margin-top:8px;gap:8px;">
+        <input type="text" id="d_issueInput" style="width:100%;margin-bottom:8px;">
+        <button class="btn" id="d_issueSaveBtn">儲存問題描述</button>
+      </div>
+    </div>
+
+    <h4 style="margin:18px 0 10px;">操作記錄</h4>
+    <div class="table-wrap" style="max-height:220px;"><table>
+      <thead><tr><th>步驟</th><th>備註</th><th>零件</th><th>操作人</th><th>時間</th></tr></thead>
+      <tbody id="detailLogRows"></tbody>
+    </table></div>
+
+    <div id="detailMsg"></div>
     <div class="modal-actions">
-      <button class="btn secondary" id="detailModalClose">關閉</button>
+      <button class="btn secondary" id="detailModalClose2">關閉</button>
+      <button class="btn" id="d_updateBtn">更新狀態</button>
     </div>
   </div>
 </div>
@@ -386,7 +446,7 @@ function renderDashboard(){
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>機台 SN</th><th>類型</th><th>狀態</th><th>問題描述</th><th>最後修改時間</th><th>最後更新者</th><th>操作</th>
+          <th>機台 SN</th><th>類型</th><th>狀態</th><th>店號</th><th>問題描述</th><th>最後修改時間</th><th>最後更新者</th><th>操作</th>
         </tr></thead>
         <tbody id="trackRows"></tbody>
       </table></div>
@@ -417,11 +477,12 @@ function drawTrackRows(){
       <td>${fmt(m.sn)}</td>
       <td><span class="status-pill" style="background:#E8F0FB;color:#2B5FA5;"><span class="dot" style="background:#2B5FA5;"></span>${fmt(m.type)}</span></td>
       <td>${statusBadgeHtml(m.status)}</td>
+      <td>${fmt(m.store_no)}</td>
       <td>${fmt(m.issue)}</td>
       <td>${fmt(m.updated_at)}</td>
       <td>${fmt(m.updated_by)}</td>
       <td><button class="btn secondary" onclick="openDetailModal('${m.sn}')">詳情</button></td>
-    </tr>`).join('') || '<tr><td colspan="7" class="empty">沒有符合條件的機台</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
 
   renderTrackPagination(total, totalPages);
 }
@@ -450,12 +511,57 @@ function renderTrackPagination(total, totalPages){
 function openDetailModal(sn){
   const m = (DATA.machines||[]).find(x=>x.sn===sn);
   if(!m) return;
-  const rows = Object.keys(m).map(k=>`
-    <tr><td class="detail-label">${k}</td><td>${fmt(m[k])}</td></tr>
-  `).join('');
-  $('#detailModalTitle').textContent = '機台詳情 — ' + sn;
-  $('#detailModalBody').innerHTML = `<table class="detail-table">${rows}</table>`;
+  currentDetailSn = sn;
+  $('#detailModalTitle').textContent = sn;
+  $('#detailMsg').innerHTML = '';
+
+  // 狀態進度條
+  const allStatuses = STATUS_ORDER.filter(s=> (DATA.machines||[]).some(x=>x.status===s) || s===m.status);
+  $('#detailStepper').innerHTML = allStatuses.map((s,i)=>{
+    const active = s === m.status;
+    const c = statusColor(s);
+    return `
+      <div class="step ${active?'step-active':''}">
+        <div class="step-circle" style="${active?`background:${c.fg};color:#fff;`:''}">${i+1}</div>
+        <div class="step-label">${s}</div>
+      </div>
+      ${i<allStatuses.length-1 ? '<div class="step-line"></div>' : ''}
+    `;
+  }).join('');
+
+  // 基本資訊卡
+  $('#detailInfoGrid').innerHTML = `
+    <div class="info-card"><div class="info-label">類型</div><div class="info-value">${fmt(m.type)}</div></div>
+    <div class="info-card"><div class="info-label">目前狀態</div><div class="info-value">${statusBadgeHtml(m.status)}</div></div>
+    <div class="info-card"><div class="info-label">負責人</div><div class="info-value">${fmt(m.owner)}</div></div>
+    <div class="info-card"><div class="info-label">批次</div><div class="info-value">${fmt(m.batch)}</div></div>
+    <div class="info-card"><div class="info-label">最後修改時間</div><div class="info-value">${fmt(m.updated_at)}</div></div>
+  `;
+
+  // 更新狀態表單
+  const statusOptions = settingValues('status');
+  $('#d_status').innerHTML = statusOptions.map(s=>`<option value="${s}" ${s===m.status?'selected':''}>${s}</option>`).join('');
+  const operators = settingValues('operator');
+  $('#d_operator').innerHTML = '<option value="">請選擇</option>' + operators.map(o=>`<option value="${o}">${o}</option>`).join('');
+  $('#d_note').value = '';
+  $('#d_parts').value = '';
+
+  // 問題描述
+  $('#d_issueText').textContent = m.issue ? m.issue : '（無問題描述）';
+  $('#d_issueEditRow').style.display = 'none';
+  $('#d_issueInput').value = m.issue || '';
+
+  // 操作記錄
+  renderDetailLog(sn);
+
   $('#detailModal').classList.add('show');
+}
+
+function renderDetailLog(sn){
+  const logs = (DATA.machine_log||[]).filter(l=>l.sn===sn).slice().reverse();
+  $('#detailLogRows').innerHTML = logs.length ? logs.map(l=>`
+    <tr><td>${fmt(l.step)}</td><td>${fmt(l.note)}</td><td>${fmt(l.parts)}</td><td>${fmt(l.operator)}</td><td>${fmt(l.timestamp)}</td></tr>
+  `).join('') : '<tr><td colspan="5" class="empty">尚無記錄</td></tr>';
 }
 
 function renderMachines(){
@@ -643,7 +749,42 @@ $('#apiSave').onclick = async ()=>{
 };
 
 $('#detailModalClose').onclick = ()=> $('#detailModal').classList.remove('show');
+$('#detailModalClose2').onclick = ()=> $('#detailModal').classList.remove('show');
 $('#detailModal').addEventListener('click', (e)=>{ if(e.target.id==='detailModal') $('#detailModal').classList.remove('show'); });
+
+let currentDetailSn = null;
+
+$('#d_issueEditBtn').onclick = ()=>{
+  $('#d_issueEditRow').style.display = 'block';
+};
+$('#d_issueSaveBtn').onclick = async ()=>{
+  const newIssue = $('#d_issueInput').value;
+  try{
+    await callApi({ action:'updateMachine', sn: currentDetailSn, data:{ issue: newIssue } });
+    await fetchData();
+    openDetailModal(currentDetailSn);
+  }catch(err){
+    $('#detailMsg').innerHTML = '<div class="msg error">更新問題描述失敗：'+err.message+'</div>';
+  }
+};
+
+$('#d_updateBtn').onclick = async ()=>{
+  const sn = currentDetailSn;
+  const newStatus = $('#d_status').value;
+  const operator = $('#d_operator').value;
+  const note = $('#d_note').value;
+  const parts = $('#d_parts').value;
+  $('#detailMsg').innerHTML = '';
+  try{
+    await callApi({ action:'updateMachine', sn: sn, data:{ status: newStatus }, operator: operator || undefined });
+    await callApi({ action:'addMachineLog', data:{ sn: sn, step: newStatus, note: note, parts: parts, operator: operator } });
+    await fetchData();
+    openDetailModal(sn);
+    $('#detailMsg').innerHTML = '<div class="msg ok">已更新狀態並記錄操作</div>';
+  }catch(err){
+    $('#detailMsg').innerHTML = '<div class="msg error">更新失敗：'+err.message+'</div>';
+  }
+};
 
 /* ---------- tabs ---------- */
 
