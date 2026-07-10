@@ -334,7 +334,9 @@ function fmt(v){ return (v===null||v===undefined||v==='') ? '—' : v; }
 
 function fmtDate(v){
   if(v===null||v===undefined||v==='') return '—';
-  const m = String(v).match(/^(\d{4}-\d{2}-\d{2})T/);
+  // 後端存的日期時間格式可能是 2025-12-29T00:00:00 或 2025-12-29 00:00:00，
+  // 這裡不管有沒有時間、用 T 還是空白分隔，一律只取「YYYY-MM-DD」那一段。
+  const m = String(v).match(/^(\d{4}-\d{2}-\d{2})/);
   if(m) return m[1];
   return v;
 }
@@ -677,16 +679,23 @@ function renderDetailLog(sn){
 
 let machineFilterType = '';
 let machineFilterStatus = '';
-let machinePage = 1;
-const MACHINE_PAGE_SIZE = 50; // 每頁顯示筆數，資料量大時避免整表塞進 DOM 造成卡頓
+let machineFilterCycle = '';
 
 function renderMachines(){
   machineFilterType = '';
   machineFilterStatus = '';
-  machinePage = 1;
+  machineFilterCycle = '';
   const types = [...new Set((DATA.machines||[]).map(m=>m.type))].filter(Boolean);
   const statusSet = new Set((DATA.machines||[]).map(m=>m.status).filter(Boolean));
   const statuses = STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!STATUS_ORDER.includes(s)).sort());
+
+  // 依實際資料算出目前最多跑到第幾次循環，下拉選單的選項會跟著資料自動增減
+  // （例如有機台已經到第 3 次循環，選單就會出現「第 3 次循環」）。
+  const maxCycle = (DATA.machines||[]).reduce((max,m)=>Math.max(max, getMachineCycleInfo(m).cycleCount), 1);
+  const cycleOptions = [];
+  for(let n=1; n<=maxCycle; n++){
+    cycleOptions.push(`<option value="${n}">${n===1 ? '第 1 次（尚未二次出貨）' : `第 ${n} 次循環`}</option>`);
+  }
 
   $('#main').innerHTML = `
     <div class="panel">
@@ -694,6 +703,10 @@ function renderMachines(){
         <input type="text" id="searchSn" placeholder="搜尋機台序號 (sn)">
         <input type="text" id="searchStoreNo" placeholder="輸入店號…">
         <button class="btn secondary" id="clearStoreNo">清除</button>
+        <select id="cycleFilter">
+          <option value="">全部循環次數</option>
+          ${cycleOptions.join('')}
+        </select>
         <span class="page-info" id="machineCount"></span>
       </div>
       <div class="filter-pill-row" id="statusFilterRow">
@@ -717,27 +730,17 @@ function renderMachines(){
         </tr></thead>
         <tbody id="machineRows"></tbody>
       </table></div>
-      <div class="pagination">
-        <span class="page-info" id="machinePageInfo"></span>
-        <div class="page-controls">
-          <button class="btn secondary" id="machinePrevPage">上一頁</button>
-          <span class="page-num" id="machinePageNum"></span>
-          <button class="btn secondary" id="machineNextPage">下一頁</button>
-        </div>
-      </div>
     </div>
   `;
   $('#addMachineBtn').onclick = openMachineModal;
-  $('#searchSn').oninput = debounce(()=>{ machinePage=1; drawMachineRows(); });
-  $('#searchStoreNo').oninput = debounce(()=>{ machinePage=1; drawMachineRows(); });
-  $('#clearStoreNo').onclick = ()=>{ $('#searchStoreNo').value=''; machinePage=1; drawMachineRows(); };
-  $('#machinePrevPage').onclick = ()=>{ if(machinePage>1){ machinePage--; drawMachineRows(); } };
-  $('#machineNextPage').onclick = ()=>{ machinePage++; drawMachineRows(); };
+  $('#searchSn').oninput = debounce(drawMachineRows);
+  $('#searchStoreNo').oninput = debounce(drawMachineRows);
+  $('#clearStoreNo').onclick = ()=>{ $('#searchStoreNo').value=''; drawMachineRows(); };
+  $('#cycleFilter').onchange = ()=>{ machineFilterCycle = $('#cycleFilter').value; drawMachineRows(); };
 
   $$('#statusFilterRow .filter-pill').forEach(btn=>{
     btn.onclick = ()=>{
       machineFilterStatus = btn.dataset.status;
-      machinePage = 1;
       $$('#statusFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
       drawMachineRows();
     };
@@ -745,7 +748,6 @@ function renderMachines(){
   $$('#typeFilterRow .filter-pill').forEach(btn=>{
     btn.onclick = ()=>{
       machineFilterType = btn.dataset.type;
-      machinePage = 1;
       $$('#typeFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
       drawMachineRows();
     };
@@ -767,20 +769,11 @@ function drawMachineRows(){
   });
   if(machineFilterType) rows = rows.filter(m=>m.type===machineFilterType);
   if(machineFilterStatus) rows = rows.filter(m=>m.status===machineFilterStatus);
+  if(machineFilterCycle) rows = rows.filter(m=>getMachineCycleInfo(m).cycleCount === Number(machineFilterCycle));
 
-  const total = rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / MACHINE_PAGE_SIZE));
-  if(machinePage > totalPages) machinePage = totalPages;
-  const start = (machinePage-1) * MACHINE_PAGE_SIZE;
-  const pageRows = rows.slice(start, start + MACHINE_PAGE_SIZE);
+  $('#machineCount').textContent = `共 ${rows.length} 筆`;
 
-  $('#machineCount').textContent = `共 ${total} 筆`;
-  $('#machinePageInfo').textContent = total ? `第 ${start+1}–${Math.min(start+MACHINE_PAGE_SIZE,total)} 筆・共 ${total} 筆` : '';
-  $('#machinePageNum').textContent = `${machinePage} / ${totalPages}`;
-  $('#machinePrevPage').disabled = machinePage<=1;
-  $('#machineNextPage').disabled = machinePage>=totalPages;
-
-  $('#machineRows').innerHTML = pageRows.map(m=>{
+  $('#machineRows').innerHTML = rows.map(m=>{
     const info = getMachineCycleInfo(m);
     return `
     <tr>
