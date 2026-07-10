@@ -84,6 +84,29 @@
   .page-controls{display:flex;align-items:center;gap:6px;}
   .page-num{font-size:13px;color:var(--ink-soft);padding:0 6px;white-space:nowrap;}
   .btn.secondary:disabled{opacity:.4;cursor:not-allowed;}
+
+  .type-block{margin-bottom:20px;}
+  .type-block:last-child{margin-bottom:0;}
+  .type-block-header{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px;}
+  .type-block-header .type-total{font-weight:400;font-size:12px;color:var(--ink-soft);margin-left:4px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--brand);display:inline-block;}
+  .type-dot{background:#3B6FD1;}
+  .status-pill-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .status-pill{
+    display:inline-flex;align-items:center;gap:6px;background:var(--brand-soft);color:var(--brand);
+    border-radius:100px;padding:6px 12px;font-size:12px;font-weight:600;
+  }
+  .status-pill .dot{background:var(--brand);width:6px;height:6px;}
+  .status-pill b{font-size:14px;margin-left:2px;}
+
+  .repair-layout{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start;}
+  @media (max-width:900px){ .repair-layout{grid-template-columns:1fr;} }
+  .low-stock-panel{position:sticky;top:80px;}
+  .low-stock-item{padding:10px 0;border-bottom:1px solid var(--line);}
+  .low-stock-item:last-child{border-bottom:none;}
+  .low-stock-name{font-size:13px;font-weight:600;}
+  .low-stock-meta{font-size:11px;color:var(--ink-soft);margin:2px 0 4px;}
+  .low-stock-qty{font-size:12px;color:var(--ink-soft);}
 </style>
 </head>
 <body>
@@ -101,6 +124,7 @@
   <button data-tab="machines">機台總覽</button>
   <button data-tab="inventory">備品庫存</button>
   <button data-tab="repair">維修紀錄</button>
+  <button data-tab="lowstock">低庫存零件</button>
 </nav>
 
 <main id="main">
@@ -249,9 +273,14 @@ function computeStats(){
   const repairing = machines.filter(m=>m.status === '台灣維修中').length;
 
   const byType = {};
-  machines.forEach(m=>{ byType[m.type] = (byType[m.type]||0)+1; });
+  const byTypeStatus = {};
+  machines.forEach(m=>{
+    byType[m.type] = (byType[m.type]||0)+1;
+    if(!byTypeStatus[m.type]) byTypeStatus[m.type] = {};
+    byTypeStatus[m.type][m.status] = (byTypeStatus[m.type][m.status]||0)+1;
+  });
 
-  return { storeCount: storeNos.size, lowStock, repairing, byType, total: machines.length };
+  return { storeCount: storeNos.size, lowStock, repairing, byType, byTypeStatus, total: machines.length };
 }
 
 /* ---------- render ---------- */
@@ -266,30 +295,35 @@ function render(){
   else if(currentTab === 'machines') renderMachines();
   else if(currentTab === 'inventory') renderInventory();
   else if(currentTab === 'repair') renderRepair();
+  else if(currentTab === 'lowstock') renderLowStock();
 }
 
 function renderDashboard(){
   const s = computeStats();
-  const typeRows = Object.entries(s.byType).map(([t,c])=>`<tr><td>${t}</td><td>${c}</td></tr>`).join('');
+  const typeBlocks = Object.keys(s.byType).map(type=>{
+    const statusEntries = Object.entries(s.byTypeStatus[type]||{});
+    const pills = statusEntries.map(([status,count])=>`
+      <span class="status-pill"><span class="dot"></span>${status}<b>${count}</b></span>
+    `).join('');
+    return `
+      <div class="type-block">
+        <div class="type-block-header"><span class="dot type-dot"></span>${type}<span class="type-total">共 ${s.byType[type]} 台</span></div>
+        <div class="status-pill-row">${pills}</div>
+      </div>
+    `;
+  }).join('');
+
   $('#main').innerHTML = `
     <div class="grid-stats">
       <div class="stat-card"><div class="label">機台總數</div><div class="value">${s.total}</div></div>
       <div class="stat-card"><div class="label">STORE 店家數（含 STORE 異常）</div><div class="value">${s.storeCount}</div><div class="note">不重複數字店號</div></div>
-      <div class="stat-card warn"><div class="label">低庫存零件</div><div class="value">${s.lowStock.length}</div><div class="note">數量 &lt; 最低庫存</div></div>
+      <div class="stat-card warn"><div class="label">低庫存零件</div><div class="value">${s.lowStock.length}</div><div class="note">數量 &lt; 最低庫存・詳見「低庫存零件」頁</div></div>
       <div class="stat-card"><div class="label">台灣維修中</div><div class="value">${s.repairing}</div></div>
     </div>
     <div class="panel">
-      <h3 style="margin-top:0;">依類型分布</h3>
-      <table><thead><tr><th>類型</th><th>數量</th></tr></thead><tbody>${typeRows}</tbody></table>
+      <h3 style="margin-top:0;">各狀態數量</h3>
+      ${typeBlocks}
     </div>
-    ${s.lowStock.length ? `
-    <div class="panel">
-      <h3 style="margin-top:0;">低庫存零件清單</h3>
-      <div class="table-wrap"><table>
-        <thead><tr><th>品名</th><th>模組</th><th>目前庫存</th><th>最低庫存</th></tr></thead>
-        <tbody>${s.lowStock.map(i=>`<tr><td>${fmt(i.name)}</td><td>${fmt(i.module)}</td><td>${fmt(i.quantity)}</td><td>${fmt(i.min_qty)}</td></tr>`).join('')}</tbody>
-      </table></div>
-    </div>` : ''}
   `;
 }
 
@@ -402,6 +436,24 @@ function renderRepair(){
       <div class="table-wrap"><table>
         <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
         <tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td>${fmt(getField(r,c))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">目前沒有維修紀錄</td></tr>`}</tbody>
+      </table></div>
+    </div>
+  `;
+}
+
+function renderLowStock(){
+  const s = computeStats();
+  $('#main').innerHTML = `
+    <div class="panel">
+      <h3 style="margin-top:0;">低庫存零件清單</h3>
+      <div class="note" style="margin-bottom:14px;color:var(--ink-soft);font-size:13px;">共 ${s.lowStock.length} 項・數量 &lt; 最低庫存</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>品名</th><th>模組</th><th>分類</th><th>目前庫存</th><th>最低庫存</th><th>備註</th></tr></thead>
+        <tbody>${s.lowStock.length ? s.lowStock.map(i=>`
+          <tr>
+            <td>${fmt(i.name)}</td><td>${fmt(i.module)}</td><td>${fmt(i.category)}</td>
+            <td><span class="badge low">${fmt(i.quantity)}</span></td><td>${fmt(i.min_qty)}</td><td>${fmt(i.note)}</td>
+          </tr>`).join('') : '<tr><td colspan="6" class="empty">目前沒有低庫存零件</td></tr>'}</tbody>
       </table></div>
     </div>
   `;
