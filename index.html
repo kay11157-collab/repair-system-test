@@ -307,6 +307,46 @@ const STATUS_COLORS = {
 };
 const DEFAULT_STATUS_COLOR = { bg:'#E6F0EA', fg:'#2F6F4E' };
 
+// 維修紀錄（repair_log）的「機器狀態」是另外一組完全不同的狀態值，
+// 跟機台總覽的狀態不是同一套。這三種已知狀態維持有語意的顏色（橙=待處理/綠=完成/紅=無法維修），
+// 其他任何沒列在這裡的狀態值，會自動從下面的色盤裡分配一個還沒用過的顏色，確保每種狀態顏色都不同。
+const REPAIR_STATUS_ORDER = ['待維修', '維修完成', '無法維修'];
+const REPAIR_KNOWN_COLORS = {
+  '待維修':   { bg:'#FBEFDD', fg:'#B8752A' }, // 橙 - 還沒處理
+  '維修完成': { bg:'#E6F0EA', fg:'#2F6F4E' }, // 綠 - 已完成
+  '無法維修': { bg:'#FBE0E0', fg:'#8A1F1F' }  // 紅 - 無法維修
+};
+const REPAIR_COLOR_PALETTE = [
+  { bg:'#E8F0FB', fg:'#2B5FA5' }, // 藍
+  { bg:'#F1E7FB', fg:'#7A3AB2' }, // 紫
+  { bg:'#E1F5F0', fg:'#1F8A72' }, // 青
+  { bg:'#FDF0D5', fg:'#9C6B0A' }, // 金黃
+  { bg:'#FDE6F0', fg:'#B23A7A' }, // 粉
+  { bg:'#E6EAFB', fg:'#3A4FB2' }, // 靛
+  { bg:'#EAF5DE', fg:'#5C8A1F' }, // 萊姆綠
+  { bg:'#F5E6DC', fg:'#8A5A2F' }, // 棕
+  { bg:'#EDEDED', fg:'#666666' }  // 灰
+];
+
+// 每次畫維修紀錄頁面時，根據當下實際出現的狀態種類重新分配顏色。
+// 用排序過的順序來分配色盤，只要狀態種類沒變，同一個狀態每次算出來的顏色都會一樣。
+let REPAIR_STATUS_COLOR_MAP = {};
+function buildRepairStatusColorMap(statusSet){
+  const map = {};
+  let paletteIdx = 0;
+  [...statusSet].sort().forEach(s=>{
+    map[s] = REPAIR_KNOWN_COLORS[s] || REPAIR_COLOR_PALETTE[(paletteIdx++) % REPAIR_COLOR_PALETTE.length];
+  });
+  return map;
+}
+function repairStatusColor(status){
+  return REPAIR_STATUS_COLOR_MAP[status] || DEFAULT_STATUS_COLOR;
+}
+function repairStatusBadgeHtml(status){
+  const c = repairStatusColor(status);
+  return `<span class="badge" style="background:${c.bg};color:${c.fg};">${fmt(status)}</span>`;
+}
+
 // 機台詳情視窗裡「狀態進度條」用的順序，代表實際的維修流程（跟總覽頁的排序目的不同）
 const STEPPER_ORDER = [
   '台灣倉', '在途 - 台灣 TO NID', 'NID - 良品', 'NLA - 良品',
@@ -861,7 +901,8 @@ function renderRepair(){
   const dateKeys = ['機器退至NID日期（MO系統）','NID回台灣日期','入芳苑日期','維修出庫日期'];
 
   const statusSet = new Set(rows.map(r=>getField(r,'機器狀態')).filter(Boolean));
-  const statuses = orderedStatuses(Object.fromEntries([...statusSet].map(s=>[s,1])));
+  REPAIR_STATUS_COLOR_MAP = buildRepairStatusColorMap(statusSet);
+  const statuses = REPAIR_STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!REPAIR_STATUS_ORDER.includes(s)).sort());
   const statusCounts = {};
   rows.forEach(r=>{
     const s = getField(r,'機器狀態');
@@ -873,7 +914,7 @@ function renderRepair(){
       <div class="filter-pill-row" id="repairStatusFilterRow">
         <button class="filter-pill active" data-status="">全部 (${rows.length})</button>
         ${statuses.map(s=>{
-          const c = statusColor(s);
+          const c = repairStatusColor(s);
           return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s} (${statusCounts[s]||0})</button>`;
         }).join('')}
       </div>
@@ -897,7 +938,10 @@ function renderRepair(){
 
 function drawRepairRows(rows, cols, dateKeys){
   const filtered = repairFilterStatus ? rows.filter(r=>getField(r,'機器狀態')===repairFilterStatus) : rows;
-  $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${cols.map(c=>`<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
+  $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${cols.map(c=>{
+    if(c.key==='機器狀態') return `<td>${repairStatusBadgeHtml(getField(r,c.key))}</td>`;
+    return `<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`;
+  }).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
 }
 
 function renderLowStock(){
