@@ -807,7 +807,10 @@ function renderInventory(){
   `;
 }
 
+let repairFilterStatus = '';
+
 function renderRepair(){
+  repairFilterStatus = '';
   const rows = DATA.repair_log || [];
   // key 是 Google Sheet 裡實際的欄位名稱（讀取資料用），label 是畫面上要顯示的文字。
   // getField() 內建會忽略欄位名稱裡的換行/空白差異，所以「機器退至NID\n日期\n（MO系統）」
@@ -825,14 +828,40 @@ function renderRepair(){
     { key:'維修出庫日期', label:'維修出庫日期' }
   ];
   const dateKeys = ['機器退至NID日期（MO系統）','NID回台灣日期','入芳苑日期','維修出庫日期'];
+
+  const statusSet = new Set(rows.map(r=>getField(r,'機器狀態')).filter(Boolean));
+  const statuses = orderedStatuses(Object.fromEntries([...statusSet].map(s=>[s,1])));
+
   $('#main').innerHTML = `
     <div class="panel">
+      <div class="filter-pill-row" id="repairStatusFilterRow">
+        <button class="filter-pill active" data-status="">全部</button>
+        ${statuses.map(s=>{
+          const c = statusColor(s);
+          return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s}</button>`;
+        }).join('')}
+      </div>
       <div class="table-wrap"><table>
         <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
-        <tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">目前沒有維修紀錄</td></tr>`}</tbody>
+        <tbody id="repairRows"></tbody>
       </table></div>
     </div>
   `;
+
+  $$('#repairStatusFilterRow .filter-pill').forEach(btn=>{
+    btn.onclick = ()=>{
+      repairFilterStatus = btn.dataset.status;
+      $$('#repairStatusFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
+      drawRepairRows(rows, cols, dateKeys);
+    };
+  });
+
+  drawRepairRows(rows, cols, dateKeys);
+}
+
+function drawRepairRows(rows, cols, dateKeys){
+  const filtered = repairFilterStatus ? rows.filter(r=>getField(r,'機器狀態')===repairFilterStatus) : rows;
+  $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${cols.map(c=>`<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
 }
 
 function renderLowStock(){
