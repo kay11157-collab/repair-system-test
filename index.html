@@ -809,13 +809,24 @@ function renderInventory(){
 
 function renderRepair(){
   const rows = DATA.repair_log || [];
-  const cols = ['NO','機器狀態','機器編號','店號','問題回報','案件編號','NID寄出日期','入芳苑日期'];
-  const dateCols = ['NID寄出日期','入芳苑日期'];
+  // key 是 Google Sheet 裡實際的欄位名稱（讀取資料用），label 是畫面上要顯示的文字。
+  // 這樣改顯示名稱不用去動 Sheet 的欄位標題。
+  const cols = [
+    { key:'NO', label:'NO' },
+    { key:'機器狀態', label:'機器狀態' },
+    { key:'機器編號', label:'機器編號' },
+    { key:'店號', label:'店號' },
+    { key:'問題回報', label:'問題回報' },
+    { key:'案件編號', label:'案件編號' },
+    { key:'NID寄出日期', label:'NID回台灣日期' },
+    { key:'入芳苑日期', label:'入芳苑日期' }
+  ];
+  const dateKeys = ['NID寄出日期','入芳苑日期'];
   $('#main').innerHTML = `
     <div class="panel">
       <div class="table-wrap"><table>
-        <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
-        <tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td>${dateCols.includes(c) ? fmtDate(getField(r,c)) : fmt(getField(r,c))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">目前沒有維修紀錄</td></tr>`}</tbody>
+        <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
+        <tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">目前沒有維修紀錄</td></tr>`}</tbody>
       </table></div>
     </div>
   `;
