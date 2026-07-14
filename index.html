@@ -280,6 +280,42 @@
   </div>
 </div>
 
+<!-- 維修紀錄詳情 modal（第一版，欄位：機器問題／其它問題／更換零件／檢修完成日期／檢修人員） -->
+<div class="modal-backdrop" id="repairDetailModal">
+  <div class="modal">
+    <div class="detail-header">
+      <h3 style="margin:0;">維修紀錄詳情</h3>
+      <button class="modal-close" id="repairDetailModalClose">✕</button>
+    </div>
+    <div id="repairDetailInfo" style="margin:10px 0 16px;font-size:13px;color:var(--ink-soft);"></div>
+    <div id="repairDetailMsg"></div>
+    <div class="field">
+      <label>機器問題</label>
+      <textarea id="rd_issue" rows="2" style="width:100%;"></textarea>
+    </div>
+    <div class="field">
+      <label>其它問題</label>
+      <textarea id="rd_other_issue" rows="2" style="width:100%;"></textarea>
+    </div>
+    <div class="field">
+      <label>更換零件</label>
+      <input type="text" id="rd_parts" placeholder="例如：驅動模組 A × 1">
+    </div>
+    <div class="field">
+      <label>檢修完成日期</label>
+      <input type="date" id="rd_done_date">
+    </div>
+    <div class="field">
+      <label>檢修人員</label>
+      <select id="rd_operator"><option value="">請選擇</option></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="repairDetailCancel">取消</button>
+      <button class="btn" id="repairDetailSave">儲存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const LS_KEY = 'repair_system_api_url';
 let API_URL = localStorage.getItem(LS_KEY) || '';
@@ -925,7 +961,7 @@ function renderRepair(){
         }).join('')}
       </div>
       <div class="table-wrap"><table>
-        <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
+        <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr></thead>
         <tbody id="repairRows"></tbody>
       </table></div>
     </div>
@@ -954,8 +990,57 @@ function drawRepairRows(rows, cols, dateKeys){
   $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${cols.map(c=>{
     if(c.key==='機器狀態') return `<td>${repairStatusBadgeHtml(getField(r,c.key))}</td>`;
     return `<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`;
-  }).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
+  }).join('')}<td><button class="btn secondary" onclick="openRepairDetailModal(${r._row})">詳情</button></td></tr>`).join('') : `<tr><td colspan="${cols.length+1}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
 }
+
+// 目前詳情視窗開著的是哪一列（Google Sheet 實際列號），儲存時要用這個定位
+let currentRepairRow = null;
+
+function openRepairDetailModal(rowIndex){
+  const r = (DATA.repair_log||[]).find(x=>x._row===rowIndex);
+  if(!r) return;
+  currentRepairRow = rowIndex;
+
+  $('#rd_operator').innerHTML = '<option value="">請選擇</option>' + settingValues('operator').map(o=>`<option value="${o}">${o}</option>`).join('');
+
+  $('#repairDetailInfo').innerHTML = `機器編號：<strong>${fmt(getField(r,'機器編號'))}</strong>　店號：${fmt(getField(r,'店號'))}　案件編號：${fmt(getField(r,'案件編號'))}`;
+  $('#rd_issue').value = getField(r,'問題回報') || '';
+  $('#rd_other_issue').value = getField(r,'其它問題') || '';
+  $('#rd_parts').value = getField(r,'更換零件') || '';
+  const doneDate = getField(r,'檢修完成日期');
+  $('#rd_done_date').value = doneDate ? fmtDate(doneDate) : '';
+  $('#rd_operator').value = getField(r,'檢修人員') || '';
+  $('#repairDetailMsg').innerHTML = '';
+  $('#repairDetailModal').classList.add('show');
+}
+
+function closeRepairDetailModal(){
+  $('#repairDetailModal').classList.remove('show');
+}
+$('#repairDetailModalClose').onclick = closeRepairDetailModal;
+$('#repairDetailCancel').onclick = closeRepairDetailModal;
+$('#repairDetailModal').addEventListener('click', (e)=>{ if(e.target.id==='repairDetailModal') closeRepairDetailModal(); });
+
+$('#repairDetailSave').onclick = async ()=>{
+  if(currentRepairRow===null) return;
+  const data = {
+    '問題回報': $('#rd_issue').value || null,
+    '其它問題': $('#rd_other_issue').value || null,
+    '更換零件': $('#rd_parts').value || null,
+    '檢修完成日期': $('#rd_done_date').value || null,
+    '檢修人員': $('#rd_operator').value || null
+  };
+  try{
+    await callApi({ action:'updateRepairLog', row: currentRepairRow, data });
+    // 樂觀更新：直接改本地資料重畫表格，不用整包重新呼叫 fetchData()
+    const r = (DATA.repair_log||[]).find(x=>x._row===currentRepairRow);
+    if(r) Object.assign(r, data);
+    closeRepairDetailModal();
+    if(currentTab==='repair') render();
+  }catch(err){
+    $('#repairDetailMsg').innerHTML = '<div class="msg error">儲存失敗：'+err.message+'</div>';
+  }
+};
 
 function renderLowStock(){
   const s = computeStats();
