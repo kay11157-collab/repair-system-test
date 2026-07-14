@@ -685,13 +685,22 @@ function renderMachines(){
   machineFilterType = '';
   machineFilterStatus = '';
   machineFilterCycle = '';
-  const types = [...new Set((DATA.machines||[]).map(m=>m.type))].filter(Boolean);
-  const statusSet = new Set((DATA.machines||[]).map(m=>m.status).filter(Boolean));
+  const allMachines = DATA.machines || [];
+  const types = [...new Set(allMachines.map(m=>m.type))].filter(Boolean);
+  const statusSet = new Set(allMachines.map(m=>m.status).filter(Boolean));
   const statuses = STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!STATUS_ORDER.includes(s)).sort());
+
+  // 每個狀態/類型底下各有幾筆機台，顯示在篩選標籤上
+  const statusCounts = {};
+  const typeCounts = {};
+  allMachines.forEach(m=>{
+    if(m.status) statusCounts[m.status] = (statusCounts[m.status]||0)+1;
+    if(m.type) typeCounts[m.type] = (typeCounts[m.type]||0)+1;
+  });
 
   // 依實際資料算出目前最多跑到第幾次循環，下拉選單的選項會跟著資料自動增減
   // （例如有機台已經到第 3 次循環，選單就會出現「第 3 次循環」）。
-  const maxCycle = (DATA.machines||[]).reduce((max,m)=>Math.max(max, getMachineCycleInfo(m).cycleCount), 1);
+  const maxCycle = allMachines.reduce((max,m)=>Math.max(max, getMachineCycleInfo(m).cycleCount), 1);
   const cycleOptions = [];
   for(let n=1; n<=maxCycle; n++){
     cycleOptions.push(`<option value="${n}">${n===1 ? '第 1 次（尚未二次出貨）' : `第 ${n} 次循環`}</option>`);
@@ -710,15 +719,15 @@ function renderMachines(){
         <span class="page-info" id="machineCount"></span>
       </div>
       <div class="filter-pill-row" id="statusFilterRow">
-        <button class="filter-pill active" data-status="">全部</button>
+        <button class="filter-pill active" data-status="">全部 (${allMachines.length})</button>
         ${statuses.map(s=>{
           const c = statusColor(s);
-          return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s}</button>`;
+          return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s} (${statusCounts[s]||0})</button>`;
         }).join('')}
       </div>
       <div class="filter-pill-row" id="typeFilterRow">
-        <button class="filter-pill type-pill active" data-type="">全部類型</button>
-        ${types.map(t=>`<button class="filter-pill type-pill" data-type="${t}">${t}</button>`).join('')}
+        <button class="filter-pill type-pill active" data-type="">全部類型 (${allMachines.length})</button>
+        ${types.map(t=>`<button class="filter-pill type-pill" data-type="${t}">${t} (${typeCounts[t]||0})</button>`).join('')}
       </div>
       <div style="margin:14px 0;">
         <button class="btn" id="addMachineBtn">＋ 新增機台</button>
@@ -831,14 +840,19 @@ function renderRepair(){
 
   const statusSet = new Set(rows.map(r=>getField(r,'機器狀態')).filter(Boolean));
   const statuses = orderedStatuses(Object.fromEntries([...statusSet].map(s=>[s,1])));
+  const statusCounts = {};
+  rows.forEach(r=>{
+    const s = getField(r,'機器狀態');
+    if(s) statusCounts[s] = (statusCounts[s]||0)+1;
+  });
 
   $('#main').innerHTML = `
     <div class="panel">
       <div class="filter-pill-row" id="repairStatusFilterRow">
-        <button class="filter-pill active" data-status="">全部</button>
+        <button class="filter-pill active" data-status="">全部 (${rows.length})</button>
         ${statuses.map(s=>{
           const c = statusColor(s);
-          return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s}</button>`;
+          return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s} (${statusCounts[s]||0})</button>`;
         }).join('')}
       </div>
       <div class="table-wrap"><table>
