@@ -140,12 +140,12 @@
 
   .filter-pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
   .filter-pill{
-    border:1px solid var(--line);background:#fff;color:var(--ink-soft);
+    border:1px solid transparent;background:var(--pill-bg, #F0F2F4);color:var(--pill-fg, var(--ink-soft));
     border-radius:100px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;
+    transition:box-shadow .12s,filter .12s;
   }
-  .filter-pill:hover{border-color:var(--brand);}
-  .filter-pill.active{background:var(--pill-bg, var(--brand)); color:var(--pill-fg, #fff); border-color:transparent;}
-  .filter-pill.type-pill.active{background:var(--brand);color:#fff;}
+  .filter-pill:hover{filter:brightness(0.96);}
+  .filter-pill.active{box-shadow:0 0 0 2px var(--pill-fg, var(--brand)) inset;}
 
   .timeline{max-height:260px;overflow-y:auto;}
   .tl-block{margin-bottom:16px;}
@@ -315,6 +315,25 @@ const STEPPER_ORDER = [
 
 function statusColor(status){
   return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
+}
+
+// 機台「類型」沒有固定的清單（可能隨時新增新類型），所以用一組固定色盤，
+// 依類型名稱算一個固定的雜湊值來選色，同一個類型每次畫面重繪都會拿到同一個顏色。
+const TYPE_PALETTE = [
+  { bg:'#E8F0FB', fg:'#2B5FA5' }, // 藍
+  { bg:'#F1E7FB', fg:'#7A3AB2' }, // 紫
+  { bg:'#FBEFDD', fg:'#B8752A' }, // 橙
+  { bg:'#E1F5F0', fg:'#1F8A72' }, // 青
+  { bg:'#FDE8F3', fg:'#A03D77' }, // 粉
+  { bg:'#EAF2D7', fg:'#5C7A29' }, // 橄欖綠
+  { bg:'#FBE0E0', fg:'#8A1F1F' }, // 深紅
+  { bg:'#EDEDED', fg:'#666666' }  // 灰
+];
+function typeColor(type){
+  if(!type) return DEFAULT_STATUS_COLOR;
+  let hash = 0;
+  for(let i=0;i<type.length;i++){ hash = (hash*31 + type.charCodeAt(i)) >>> 0; }
+  return TYPE_PALETTE[hash % TYPE_PALETTE.length];
 }
 function statusBadgeHtml(status){
   const c = statusColor(status);
@@ -727,7 +746,10 @@ function renderMachines(){
       </div>
       <div class="filter-pill-row" id="typeFilterRow">
         <button class="filter-pill type-pill active" data-type="">全部類型 (${allMachines.length})</button>
-        ${types.map(t=>`<button class="filter-pill type-pill" data-type="${t}">${t} (${typeCounts[t]||0})</button>`).join('')}
+        ${types.map(t=>{
+          const c = typeColor(t);
+          return `<button class="filter-pill type-pill" data-type="${t}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${t} (${typeCounts[t]||0})</button>`;
+        }).join('')}
       </div>
       <div style="margin:14px 0;">
         <button class="btn" id="addMachineBtn">＋ 新增機台</button>
