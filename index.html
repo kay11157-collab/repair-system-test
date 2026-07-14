@@ -280,7 +280,7 @@
   </div>
 </div>
 
-<!-- 維修紀錄詳情 modal（第一版，欄位：機器問題／其它問題／更換零件／檢修完成日期／檢修人員） -->
+<!-- 維修紀錄詳情 modal（第一版，欄位：機器問題／檢修問題／更換零件／檢修完成日期／檢修人員） -->
 <div class="modal-backdrop" id="repairDetailModal">
   <div class="modal">
     <div class="detail-header">
@@ -294,7 +294,7 @@
       <textarea id="rd_issue" rows="2" style="width:100%;"></textarea>
     </div>
     <div class="field">
-      <label>其它問題</label>
+      <label>檢修問題</label>
       <textarea id="rd_other_issue" rows="2" style="width:100%;"></textarea>
     </div>
     <div class="field">
@@ -1005,7 +1005,7 @@ function openRepairDetailModal(rowIndex){
 
   $('#repairDetailInfo').innerHTML = `機器編號：<strong>${fmt(getField(r,'機器編號'))}</strong>　店號：${fmt(getField(r,'店號'))}　案件編號：${fmt(getField(r,'案件編號'))}`;
   $('#rd_issue').value = getField(r,'問題回報') || '';
-  $('#rd_other_issue').value = getField(r,'其它問題') || '';
+  $('#rd_other_issue').value = getField(r,'檢修問題') || '';
   $('#rd_parts').value = getField(r,'更換零件') || '';
   const doneDate = getField(r,'檢修完成日期');
   $('#rd_done_date').value = doneDate ? fmtDate(doneDate) : '';
@@ -1025,7 +1025,7 @@ $('#repairDetailSave').onclick = async ()=>{
   if(currentRepairRow===null) return;
   const data = {
     '問題回報': $('#rd_issue').value || null,
-    '其它問題': $('#rd_other_issue').value || null,
+    '檢修問題': $('#rd_other_issue').value || null,
     '更換零件': $('#rd_parts').value || null,
     '檢修完成日期': $('#rd_done_date').value || null,
     '檢修人員': $('#rd_operator').value || null
