@@ -879,9 +879,11 @@ function renderInventory(){
 }
 
 let repairFilterStatus = '';
+let repairSearchSn = '';
 
 function renderRepair(){
   repairFilterStatus = '';
+  repairSearchSn = '';
   const rows = DATA.repair_log || [];
   // key 是 Google Sheet 裡實際的欄位名稱（讀取資料用），label 是畫面上要顯示的文字。
   // getField() 內建會忽略欄位名稱裡的換行/空白差異，所以「機器退至NID\n日期\n（MO系統）」
@@ -911,6 +913,10 @@ function renderRepair(){
 
   $('#main').innerHTML = `
     <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="repairSearchSn" placeholder="搜尋機台序號 (sn)">
+        <span class="page-info" id="repairCount"></span>
+      </div>
       <div class="filter-pill-row" id="repairStatusFilterRow">
         <button class="filter-pill active" data-status="">全部 (${rows.length})</button>
         ${statuses.map(s=>{
@@ -925,6 +931,11 @@ function renderRepair(){
     </div>
   `;
 
+  $('#repairSearchSn').oninput = debounce(()=>{
+    repairSearchSn = $('#repairSearchSn').value.toLowerCase();
+    drawRepairRows(rows, cols, dateKeys);
+  });
+
   $$('#repairStatusFilterRow .filter-pill').forEach(btn=>{
     btn.onclick = ()=>{
       repairFilterStatus = btn.dataset.status;
@@ -937,7 +948,9 @@ function renderRepair(){
 }
 
 function drawRepairRows(rows, cols, dateKeys){
-  const filtered = repairFilterStatus ? rows.filter(r=>getField(r,'機器狀態')===repairFilterStatus) : rows;
+  let filtered = repairFilterStatus ? rows.filter(r=>getField(r,'機器狀態')===repairFilterStatus) : rows;
+  if(repairSearchSn) filtered = filtered.filter(r=>String(getField(r,'機器編號')||'').toLowerCase().includes(repairSearchSn));
+  $('#repairCount').textContent = `共 ${filtered.length} 筆`;
   $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${cols.map(c=>{
     if(c.key==='機器狀態') return `<td>${repairStatusBadgeHtml(getField(r,c.key))}</td>`;
     return `<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`;
