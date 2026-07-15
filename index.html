@@ -285,7 +285,7 @@
 <div class="modal-backdrop" id="repairDetailModal">
   <div class="modal repair-detail-modal">
     <div class="detail-header">
-      <h3 style="margin:0;">維修紀錄詳情</h3>
+      <h3 style="margin:0;">維修紀錄歷程</h3>
       <button class="modal-close" id="repairDetailModalClose">✕</button>
     </div>
     <div id="repairDetailInfo" style="margin:10px 0 16px;font-size:13px;color:var(--ink-soft);"></div>
@@ -917,6 +917,27 @@ function renderInventory(){
 
 let repairFilterStatus = '';
 let repairSearchSn = '';
+let repairVisitCounts = new Map(); // r._row -> 這台機器第幾次出現在維修紀錄裡
+
+// 依 NO 由小到大排序，算出同一個「機器編號」第幾次出現在維修紀錄裡（第 1 次、第 2 次…）。
+// 用來標示「這台機器又回廠維修了」。
+function computeRepairVisitCounts(rows){
+  const counts = {};
+  const result = new Map();
+  const sorted = [...rows].sort((a,b)=> (Number(getField(a,'NO'))||0) - (Number(getField(b,'NO'))||0));
+  sorted.forEach(r=>{
+    const sn = getField(r,'機器編號');
+    if(!sn) return;
+    counts[sn] = (counts[sn]||0) + 1;
+    result.set(r._row, counts[sn]);
+  });
+  return result;
+}
+
+// 只要「檢修問題／更換零件／檢修完成日期／檢修人員」這 4 個欄位任一個有值，就算已經填寫過維修紀錄歷程
+function hasRepairDetailFilled(r){
+  return !!(getField(r,'檢修問題') || getField(r,'更換零件') || getField(r,'檢修完成日期') || getField(r,'檢修人員'));
+}
 
 function renderRepair(){
   repairFilterStatus = '';
@@ -948,6 +969,10 @@ function renderRepair(){
     if(s) statusCounts[s] = (statusCounts[s]||0)+1;
   });
 
+  // 同一台機器（機器編號）如果在維修紀錄裡出現不只一次，代表它又回廠維修過。
+  // 依 NO 由小到大排序，算出每一列是這台機器第幾次出現，超過第 1 次就顯示「第N次入廠」標籤。
+  repairVisitCounts = computeRepairVisitCounts(rows);
+
   $('#main').innerHTML = `
     <div class="panel">
       <div class="toolbar">
@@ -962,7 +987,7 @@ function renderRepair(){
         }).join('')}
       </div>
       <div class="table-wrap"><table>
-        <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr></thead>
+        <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}<th>維修紀錄歷程</th></tr></thead>
         <tbody id="repairRows"></tbody>
       </table></div>
     </div>
@@ -988,10 +1013,19 @@ function drawRepairRows(rows, cols, dateKeys){
   let filtered = repairFilterStatus ? rows.filter(r=>getField(r,'機器狀態')===repairFilterStatus) : rows;
   if(repairSearchSn) filtered = filtered.filter(r=>String(getField(r,'機器編號')||'').toLowerCase().includes(repairSearchSn));
   $('#repairCount').textContent = `共 ${filtered.length} 筆`;
-  $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${cols.map(c=>{
-    if(c.key==='機器狀態') return `<td>${repairStatusBadgeHtml(getField(r,c.key))}</td>`;
-    return `<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`;
-  }).join('')}<td><button class="btn secondary" onclick="openRepairDetailModal(${r._row})">詳情</button></td></tr>`).join('') : `<tr><td colspan="${cols.length+1}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
+  $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>{
+    const visit = repairVisitCounts.get(r._row) || 1;
+    const filled = hasRepairDetailFilled(r);
+    const cellsHtml = cols.map(c=>{
+      if(c.key==='機器狀態') return `<td>${repairStatusBadgeHtml(getField(r,c.key))}</td>`;
+      if(c.key==='機器編號'){
+        const badge = visit>1 ? ` <span class="badge" style="background:#F1E7FB;color:#7A3AB2;">第${visit}次入廠</span>` : '';
+        return `<td>${fmt(getField(r,c.key))}${badge}</td>`;
+      }
+      return `<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`;
+    }).join('');
+    return `<tr>${cellsHtml}<td><button class="btn ${filled?'':'secondary'}" onclick="openRepairDetailModal(${r._row})">維修紀錄歷程</button></td></tr>`;
+  }).join('') : `<tr><td colspan="${cols.length+1}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
 }
 
 // 目前詳情視窗開著的是哪一列（Google Sheet 實際列號），儲存時要用這個定位
