@@ -430,11 +430,18 @@ function fmt(v){ return (v===null||v===undefined||v==='') ? '—' : v; }
 
 function fmtDate(v){
   if(v===null||v===undefined||v==='') return '—';
-  // 後端存的日期時間格式可能是 2025-12-29T00:00:00 或 2025-12-29 00:00:00，
-  // 這裡不管有沒有時間、用 T 還是空白分隔，一律只取「YYYY-MM-DD」那一段。
-  const m = String(v).match(/^(\d{4}-\d{2}-\d{2})/);
-  if(m) return m[1];
-  return v;
+  // 有些儲存格裡會手動填超過一個日期（例如用換行分開的「2025/09/10」「2026/02/10」），
+  // 這裡把裡面所有看起來像日期的片段都抓出來，統一成 YYYY-MM-DD 格式，每個各自換行顯示。
+  const matches = String(v).match(/\d{4}[-\/]\d{2}[-\/]\d{2}/g);
+  if(!matches || !matches.length) return v;
+  return matches.map(d=>d.replace(/\//g,'-')).join('<br>');
+}
+
+// 給 <input type="date"> 用：只取儲存格裡的第一個日期（date 輸入框沒辦法放多個值）
+function firstDateOnly(v){
+  if(v===null||v===undefined||v==='') return '';
+  const m = String(v).match(/\d{4}[-\/]\d{2}[-\/]\d{2}/);
+  return m ? m[0].replace(/\//g,'-') : '';
 }
 
 // 有些 Google Sheet 標題儲存格裡藏了換行符號（例如「機器損壞時間\n（NID出貨）」），
@@ -953,6 +960,7 @@ function renderRepair(){
     { key:'店號', label:'店號' },
     { key:'問題回報', label:'問題回報' },
     { key:'案件編號', label:'案件編號' },
+    { key:'其他資訊', label:'其他資訊' },
     { key:'機器退至NID日期（MO系統）', label:'機器退至NID日期' },
     { key:'NID回台灣日期', label:'NID回台灣日期' },
     { key:'入芳苑日期', label:'入芳苑日期' },
@@ -1043,7 +1051,7 @@ function openRepairDetailModal(rowIndex){
   $('#rd_other_issue').value = getField(r,'檢修問題') || '';
   $('#rd_parts').value = getField(r,'更換零件') || '';
   const doneDate = getField(r,'檢修完成日期');
-  $('#rd_done_date').value = doneDate ? fmtDate(doneDate) : '';
+  $('#rd_done_date').value = firstDateOnly(doneDate);
   $('#rd_operator').value = getField(r,'檢修人員') || '';
   $('#repairDetailMsg').innerHTML = '';
   $('#repairDetailModal').classList.add('show');
