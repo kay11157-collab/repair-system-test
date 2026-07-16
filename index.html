@@ -871,7 +871,7 @@ function renderMachines(){
       </div>
       <div class="table-wrap" style="max-height:65vh;"><table>
         <thead><tr>
-          <th>sn</th><th>type</th><th>status</th><th>store_no</th><th>issue</th><th>owner</th>
+          <th>機器號</th><th>類型</th><th>狀態</th><th>店號</th><th>問題描述</th>
           <th>機器損壞時間（NID出貨）</th><th>NID入庫（不良品）</th><th>台灣入庫（不良品）</th>
         </tr></thead>
         <tbody id="machineRows"></tbody>
@@ -924,12 +924,12 @@ function drawMachineRows(){
     return `
     <tr>
       <td>${fmt(m.sn)}${cycleBadgeHtml(info)}</td><td>${fmt(m.type)}</td><td>${statusBadgeHtml(m.status)}</td>
-      <td>${fmt(info.effectiveStoreNo)}</td><td>${fmt(m.issue)}</td><td>${fmt(m.owner)}</td>
+      <td>${fmt(info.effectiveStoreNo)}</td><td>${fmt(m.issue)}</td>
       <td>${fmtDate(getField(m,'機器損壞時間（NID出貨）'))}</td>
       <td>${fmtDate(getField(m,'NID入庫（不良品）'))}</td>
       <td>${fmtDate(getField(m,'台灣入庫（不良品）'))}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
 }
 
 function renderInventory(){
