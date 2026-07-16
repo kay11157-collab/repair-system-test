@@ -177,6 +177,7 @@
 <nav id="tabs">
   <button data-tab="dashboard" class="active">總覽</button>
   <button data-tab="machines">機台總覽</button>
+  <button data-tab="issuelog">店內機器問題追蹤</button>
   <button data-tab="repair">維修紀錄</button>
   <button data-tab="inventory">備品庫存</button>
   <button data-tab="lowstock">低庫存零件</button>
@@ -588,6 +589,7 @@ function render(){
   if(!DATA){ return; }
   if(currentTab === 'dashboard') renderDashboard();
   else if(currentTab === 'machines') renderMachines();
+  else if(currentTab === 'issuelog') renderIssueLog();
   else if(currentTab === 'inventory') renderInventory();
   else if(currentTab === 'repair') renderRepair();
   else if(currentTab === 'lowstock') renderLowStock();
@@ -930,6 +932,49 @@ function drawMachineRows(){
       <td>${fmtDate(getField(m,'台灣入庫（不良品）'))}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
+}
+
+// ---------- 店內機器問題追蹤（issue_log，取代 FCM1 那份 Google Sheet） ----------
+// 第一版：先做基本列表 + 搜尋，新增/編輯功能之後再加。
+const ISSUE_LOG_COLS = [
+  'TRACK NO.','店號','異常發生日期','分類1','分類2','分類3','分類4',
+  '最後一階（資料自動帶入）','問題敘述','排除歷程','備註',
+  'LINE上聊天室名稱','LINE聊天室對話內容','機器目前狀態追蹤',
+  'NID備品寄給維修人/店的時間','更換零件名稱','PDCA',
+  '機器編號','機頭編號A01','機頭編號A02','機頭編號A03','機頭編號P04','地區'
+];
+const ISSUE_LOG_DATE_COLS = ['異常發生日期','NID備品寄給維修人/店的時間'];
+
+function renderIssueLog(){
+  const rows = DATA.issue_log || [];
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="issueSearch" placeholder="搜尋店號或 TRACK NO.">
+        <span class="page-info" id="issueCount"></span>
+      </div>
+      <div class="table-wrap" style="max-height:70vh;"><table>
+        <thead><tr>${ISSUE_LOG_COLS.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <tbody id="issueRows"></tbody>
+      </table></div>
+    </div>
+  `;
+  $('#issueSearch').oninput = debounce(()=>drawIssueRows(rows));
+  drawIssueRows(rows);
+}
+
+function drawIssueRows(rows){
+  const q = ($('#issueSearch').value||'').toLowerCase();
+  let filtered = rows;
+  if(q) filtered = rows.filter(r=>
+    String(r['店號']||'').toLowerCase().includes(q) ||
+    String(r['TRACK NO.']||'').toLowerCase().includes(q)
+  );
+  $('#issueCount').textContent = `共 ${filtered.length} 筆`;
+  $('#issueRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${ISSUE_LOG_COLS.map(c=>{
+    const v = r[c];
+    return `<td>${ISSUE_LOG_DATE_COLS.includes(c) ? fmtDate(v) : fmt(v)}</td>`;
+  }).join('')}</tr>`).join('') : `<tr><td colspan="${ISSUE_LOG_COLS.length}" class="empty">目前沒有問題追蹤紀錄</td></tr>`;
 }
 
 function renderInventory(){
