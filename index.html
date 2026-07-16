@@ -633,7 +633,7 @@ function renderDashboard(){
       </div>
       <div class="table-wrap" style="max-height:70vh;"><table>
         <thead><tr>
-          <th>機台 SN</th><th>類型</th><th>狀態</th><th>店號</th><th>問題描述</th><th>最後修改時間</th><th>最後更新者</th><th>歷程</th>
+          <th>機台 SN</th><th>類型</th><th>狀態</th><th>店號</th><th>問題描述</th><th>最後修改時間</th><th>最後更新者</th><th>維修紀錄</th><th>歷程</th>
         </tr></thead>
         <tbody id="trackRows"></tbody>
       </table></div>
@@ -643,14 +643,39 @@ function renderDashboard(){
   drawTrackRows();
 }
 
+// 統計每台機器（機器編號）在維修紀錄裡出現幾次，機台進度追蹤表可以直接顯示，
+// 不用再切去維修紀錄頁手動搜尋比對。
+function computeRepairCountBySn(){
+  const counts = {};
+  (DATA.repair_log||[]).forEach(r=>{
+    const sn = getField(r,'機器編號');
+    if(sn) counts[sn] = (counts[sn]||0) + 1;
+  });
+  return counts;
+}
+
+// 從機台進度追蹤點「維修紀錄」badge，直接跳到維修紀錄頁並自動用這台機器的 SN 篩選
+let pendingRepairSearchSn = null;
+function goToRepairForSn(sn){
+  pendingRepairSearchSn = sn;
+  currentTab = 'repair';
+  setActiveTab('repair');
+  render();
+}
+
 function drawTrackRows(){
   const q = ($('#trackSearch').value||'').toLowerCase();
   let rows = DATA.machines || [];
   if(q) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(q));
+  const repairCounts = computeRepairCountBySn();
 
   $('#trackCount').textContent = `共 ${rows.length} 筆`;
   $('#trackRows').innerHTML = rows.map(m=>{
     const info = getMachineCycleInfo(m);
+    const repairCount = repairCounts[m.sn] || 0;
+    const repairCell = repairCount>0
+      ? `<button class="btn secondary" onclick="goToRepairForSn('${m.sn}')" style="border-color:#B8752A;color:#B8752A;">維修 ${repairCount} 筆</button>`
+      : '—';
     return `
     <tr>
       <td>${fmt(m.sn)}${cycleBadgeHtml(info)}</td>
@@ -660,9 +685,10 @@ function drawTrackRows(){
       <td>${fmt(m.issue)}</td>
       <td>${fmt(m.updated_at)}</td>
       <td>${fmt(m.updated_by)}</td>
+      <td>${repairCell}</td>
       <td><button class="btn secondary" onclick="openDetailModal('${m.sn}')">詳情</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
 }
 
 function openDetailModal(sn){
@@ -953,7 +979,9 @@ function hasRepairDetailFilled(r){
 
 function renderRepair(){
   repairFilterStatus = '';
-  repairSearchSn = '';
+  const initialSearch = pendingRepairSearchSn || '';
+  pendingRepairSearchSn = null;
+  repairSearchSn = initialSearch.toLowerCase();
   const rows = DATA.repair_log || [];
   // key 是 Google Sheet 裡實際的欄位名稱（讀取資料用），label 是畫面上要顯示的文字。
   // getField() 內建會忽略欄位名稱裡的換行/空白差異，所以「機器退至NID\n日期\n（MO系統）」
@@ -989,7 +1017,7 @@ function renderRepair(){
   $('#main').innerHTML = `
     <div class="panel">
       <div class="toolbar">
-        <input type="text" id="repairSearchSn" placeholder="搜尋機台序號 (sn)">
+        <input type="text" id="repairSearchSn" placeholder="搜尋機台序號 (sn)" value="${initialSearch}">
         <span class="page-info" id="repairCount"></span>
       </div>
       <div class="filter-pill-row" id="repairStatusFilterRow">
