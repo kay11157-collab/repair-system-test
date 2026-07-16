@@ -323,6 +323,20 @@
   </div>
 </div>
 
+<!-- 店內機器問題追蹤詳情 modal：23 個欄位用兩欄並排呈現，不用左右滑動看 -->
+<div class="modal-backdrop" id="issueDetailModal">
+  <div class="modal detail-modal">
+    <div class="detail-header">
+      <h3 style="margin:0;">問題追蹤詳情</h3>
+      <button class="modal-close" id="issueDetailModalClose">✕</button>
+    </div>
+    <div class="detail-info-grid" id="issueDetailGrid"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="issueDetailClose2">關閉</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const LS_KEY = 'repair_system_api_url';
 let API_URL = localStorage.getItem(LS_KEY) || '';
@@ -935,8 +949,9 @@ function drawMachineRows(){
 }
 
 // ---------- 店內機器問題追蹤（issue_log，取代 FCM1 那份 Google Sheet） ----------
-// 第一版：先做基本列表 + 搜尋，新增/編輯功能之後再加。
-const ISSUE_LOG_COLS = [
+// 第一版：列表只顯示幾個關鍵欄位，其他 23 欄全部內容透過「詳情」彈出視窗看（兩欄並排，不用左右滑動）。
+// 新增/編輯功能之後再加。
+const ISSUE_LOG_ALL_FIELDS = [
   'TRACK NO.','店號','異常發生日期','分類1','分類2','分類3','分類4',
   '最後一階（資料自動帶入）','問題敘述','排除歷程','備註',
   'LINE上聊天室名稱','LINE聊天室對話內容','機器目前狀態追蹤',
@@ -944,9 +959,14 @@ const ISSUE_LOG_COLS = [
   '機器編號','機頭編號A01','機頭編號A02','機頭編號A03','機頭編號P04','地區'
 ];
 const ISSUE_LOG_DATE_COLS = ['異常發生日期','NID備品寄給維修人/店的時間'];
+// 列表要顯示的關鍵欄位（其他欄位點「詳情」才看得到）
+const ISSUE_LOG_LIST_COLS = ['TRACK NO.','店號','異常發生日期','最後一階（資料自動帶入）','機器目前狀態追蹤','PDCA'];
+
+let issueLogRowsCache = [];
 
 function renderIssueLog(){
   const rows = DATA.issue_log || [];
+  issueLogRowsCache = rows;
   $('#main').innerHTML = `
     <div class="panel">
       <div class="toolbar">
@@ -954,7 +974,7 @@ function renderIssueLog(){
         <span class="page-info" id="issueCount"></span>
       </div>
       <div class="table-wrap" style="max-height:70vh;"><table>
-        <thead><tr>${ISSUE_LOG_COLS.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <thead><tr>${ISSUE_LOG_LIST_COLS.map(c=>`<th>${c}</th>`).join('')}<th>詳情</th></tr></thead>
         <tbody id="issueRows"></tbody>
       </table></div>
     </div>
@@ -971,10 +991,21 @@ function drawIssueRows(rows){
     String(r['TRACK NO.']||'').toLowerCase().includes(q)
   );
   $('#issueCount').textContent = `共 ${filtered.length} 筆`;
-  $('#issueRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${ISSUE_LOG_COLS.map(c=>{
+  $('#issueRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${ISSUE_LOG_LIST_COLS.map(c=>{
     const v = r[c];
     return `<td>${ISSUE_LOG_DATE_COLS.includes(c) ? fmtDate(v) : fmt(v)}</td>`;
-  }).join('')}</tr>`).join('') : `<tr><td colspan="${ISSUE_LOG_COLS.length}" class="empty">目前沒有問題追蹤紀錄</td></tr>`;
+  }).join('')}<td><button class="btn secondary" onclick="openIssueDetailModal('${r._row}')">詳情</button></td></tr>`).join('') : `<tr><td colspan="${ISSUE_LOG_LIST_COLS.length+1}" class="empty">目前沒有問題追蹤紀錄</td></tr>`;
+}
+
+function openIssueDetailModal(rowIndex){
+  const r = issueLogRowsCache.find(x=>String(x._row)===String(rowIndex));
+  if(!r) return;
+  $('#issueDetailGrid').innerHTML = ISSUE_LOG_ALL_FIELDS.map(f=>{
+    const v = r[f];
+    const display = ISSUE_LOG_DATE_COLS.includes(f) ? fmtDate(v) : fmt(v);
+    return `<div class="info-card"><div class="info-label">${f}</div><div class="info-value">${display}</div></div>`;
+  }).join('');
+  $('#issueDetailModal').classList.add('show');
 }
 
 function renderInventory(){
@@ -1141,6 +1172,13 @@ function closeRepairDetailModal(){
 $('#repairDetailModalClose').onclick = closeRepairDetailModal;
 $('#repairDetailCancel').onclick = closeRepairDetailModal;
 $('#repairDetailModal').addEventListener('click', (e)=>{ if(e.target.id==='repairDetailModal') closeRepairDetailModal(); });
+
+function closeIssueDetailModal(){
+  $('#issueDetailModal').classList.remove('show');
+}
+$('#issueDetailModalClose').onclick = closeIssueDetailModal;
+$('#issueDetailClose2').onclick = closeIssueDetailModal;
+$('#issueDetailModal').addEventListener('click', (e)=>{ if(e.target.id==='issueDetailModal') closeIssueDetailModal(); });
 
 $('#repairDetailSave').onclick = async ()=>{
   if(currentRepairRow===null) return;
