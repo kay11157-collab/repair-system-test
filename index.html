@@ -1263,8 +1263,10 @@ const ISSUE_FIELD_CONFIG = [
   { key:'PDCA', type:'select', options:['P','D','C','A'] },
   { key:'NID備品寄給維修人/店的時間', type:'textarea', rows:6 },
   { key:'更換零件名稱', type:'textarea', rows:6 },
-  { key:'機器編號', type:'text' },
-  { key:'機頭編號A01', type:'text' },
+  { type:'group', fields:[
+    { key:'機器編號', type:'text' },
+    { key:'機頭編號A01', type:'text' }
+  ]},
   { key:'電箱編號A02', type:'text' },
   { key:'人機組編號A03', type:'text' },
   { key:'人機介面編號P04', type:'text' },
@@ -1273,9 +1275,16 @@ const ISSUE_FIELD_CONFIG = [
 
 function escapeAttr(s){ return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 
-function issueFieldInputHtml(cfg, value){
-  const safeVal = (value===null||value===undefined) ? '' : String(value);
+function issueFieldInputHtml(cfg, record){
+  record = record || {};
   const spanStyle = cfg.full ? ' style="grid-column:1 / -1;"' : '';
+  if(cfg.type === 'group'){
+    // 把幾個小欄位包在同一個格子裡上下疊放，讓它們加起來的高度跟旁邊的大文字框對齊
+    const inner = cfg.fields.map(sub => issueFieldInputHtml(sub, record)).join('');
+    return `<div${spanStyle}>${inner}</div>`;
+  }
+  const value = record[cfg.key];
+  const safeVal = (value===null||value===undefined) ? '' : String(value);
   if(cfg.type === 'readonly'){
     return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="text" data-field="${cfg.key}" value="${escapeAttr(safeVal)}" disabled></div>`;
   }
@@ -1303,7 +1312,7 @@ function openIssueAddModal(){
   $('#issueFormTitle').textContent = '新增問題';
   $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG
     .filter(cfg => cfg.key!=='TRACK NO.' && cfg.key!=='最後一階（資料自動帶入）') // 這兩個新增時不用填，系統自動處理
-    .map(cfg => issueFieldInputHtml(cfg, '')).join('');
+    .map(cfg => issueFieldInputHtml(cfg, {})).join('');
   $('#issueFormMsg').innerHTML = '';
   $('#issueFormModal').classList.add('show');
 }
@@ -1314,7 +1323,7 @@ function openIssueDetailModal(rowIndex){
   currentIssueMode = 'edit';
   currentIssueRow = rowIndex;
   $('#issueFormTitle').textContent = '編輯問題追蹤';
-  $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG.map(cfg => issueFieldInputHtml(cfg, r[cfg.key])).join('');
+  $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG.map(cfg => issueFieldInputHtml(cfg, r)).join('');
   $('#issueFormMsg').innerHTML = '';
   bindIssueCategoryLiveUpdate();
   $('#issueFormModal').classList.add('show');
