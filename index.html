@@ -67,6 +67,7 @@
   th{color:var(--ink-soft);font-weight:600;font-size:12px;position:sticky;top:0;background:var(--panel);}
   tbody tr:hover{background:var(--bg);}
   .table-wrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px;}
+  .truncate-cell{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .badge{display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;background:var(--brand-soft);color:var(--brand);}
   .badge.low{background:var(--warn-soft);color:var(--warn);}
   .empty{color:var(--ink-soft);font-size:13px;padding:30px;text-align:center;}
@@ -956,7 +957,7 @@ const ISSUE_LOG_ALL_FIELDS = [
   '最後一階（資料自動帶入）','問題敘述','排除歷程','備註',
   'LINE上聊天室名稱','LINE聊天室對話內容','機器目前狀態追蹤',
   'NID備品寄給維修人/店的時間','更換零件名稱','PDCA',
-  '機器編號','機頭編號A01','機頭編號A02','機頭編號A03','機頭編號P04','地區'
+  '機器編號','機頭編號A01','電箱編號A02','人機組編號A03','人機介面編號P04','地區'
 ];
 const ISSUE_LOG_DATE_COLS = ['異常發生日期','NID備品寄給維修人/店的時間'];
 // 列表要顯示的關鍵欄位（其他欄位點「詳情」才看得到）
@@ -983,6 +984,8 @@ function renderIssueLog(){
   drawIssueRows(rows);
 }
 
+const ISSUE_LOG_TRUNCATE_COLS = ['最後一階（資料自動帶入）','機器目前狀態追蹤'];
+
 function drawIssueRows(rows){
   const q = ($('#issueSearch').value||'').toLowerCase();
   let filtered = rows;
@@ -993,7 +996,10 @@ function drawIssueRows(rows){
   $('#issueCount').textContent = `共 ${filtered.length} 筆`;
   $('#issueRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${ISSUE_LOG_LIST_COLS.map(c=>{
     const v = r[c];
-    return `<td>${ISSUE_LOG_DATE_COLS.includes(c) ? fmtDate(v) : fmt(v)}</td>`;
+    const display = ISSUE_LOG_DATE_COLS.includes(c) ? fmtDate(v) : fmt(v);
+    const cls = ISSUE_LOG_TRUNCATE_COLS.includes(c) ? ' class="truncate-cell"' : '';
+    const title = ISSUE_LOG_TRUNCATE_COLS.includes(c) ? ` title="${String(fmt(v)).replace(/"/g,'&quot;')}"` : '';
+    return `<td${cls}${title}>${display}</td>`;
   }).join('')}<td><button class="btn secondary" onclick="openIssueDetailModal('${r._row}')">詳情</button></td></tr>`).join('') : `<tr><td colspan="${ISSUE_LOG_LIST_COLS.length+1}" class="empty">目前沒有問題追蹤紀錄</td></tr>`;
 }
 
