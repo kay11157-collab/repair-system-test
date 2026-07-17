@@ -338,6 +338,7 @@
     <div id="issueFormMsg"></div>
     <div class="issue-form-grid" id="issueFormGrid"></div>
     <div class="modal-actions">
+      <button class="btn secondary" id="issueFormDelete" style="display:none;border-color:#B8752A;color:#B8752A;">刪除這筆</button>
       <button class="btn secondary" id="issueFormCancel">取消</button>
       <button class="btn" id="issueFormSave">儲存</button>
     </div>
@@ -1198,8 +1199,18 @@ const ISSUE_LOG_LIST_COLS = [
 
 let issueLogRowsCache = [];
 
+// 依 TRACK NO. 裡的數字由大到小排序，新增的資料（數字最大）自然會排在最上面，
+// 不用管它在 Google Sheet 裡實際是哪一列。
+function sortIssueRowsByTrackNo(rows){
+  return [...rows].sort((a,b)=>{
+    const na = Number(String(a['TRACK NO.']||'').match(/\d+/)?.[0] || 0);
+    const nb = Number(String(b['TRACK NO.']||'').match(/\d+/)?.[0] || 0);
+    return nb - na;
+  });
+}
+
 function renderIssueLog(){
-  const rows = DATA.issue_log || [];
+  const rows = sortIssueRowsByTrackNo(DATA.issue_log || []);
   issueLogRowsCache = rows;
   $('#main').innerHTML = `
     <div class="panel">
@@ -1314,6 +1325,7 @@ function openIssueAddModal(){
     .filter(cfg => cfg.key!=='TRACK NO.' && cfg.key!=='最後一階（資料自動帶入）') // 這兩個新增時不用填，系統自動處理
     .map(cfg => issueFieldInputHtml(cfg, {})).join('');
   $('#issueFormMsg').innerHTML = '';
+  $('#issueFormDelete').style.display = 'none';
   $('#issueFormModal').classList.add('show');
 }
 
@@ -1325,6 +1337,7 @@ function openIssueDetailModal(rowIndex){
   $('#issueFormTitle').textContent = '編輯問題追蹤';
   $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG.map(cfg => issueFieldInputHtml(cfg, r)).join('');
   $('#issueFormMsg').innerHTML = '';
+  $('#issueFormDelete').style.display = '';
   bindIssueCategoryLiveUpdate();
   $('#issueFormModal').classList.add('show');
 }
@@ -1370,6 +1383,10 @@ $('#issueFormSave').onclick = async ()=>{
   data['最後一階（資料自動帶入）'] = calcIssueLastLevel(data) || null;
 
   $('#issueFormMsg').innerHTML = '';
+  // 存檔過程中鎖住儲存/刪除按鈕，避免連點兩下送出兩次新增請求
+  $('#issueFormSave').disabled = true;
+  $('#issueFormDelete').disabled = true;
+  $('#issueFormSave').textContent = '儲存中…';
   try{
     if(currentIssueMode === 'add'){
       await callApi({ action:'addIssueLog', data });
@@ -1385,6 +1402,36 @@ $('#issueFormSave').onclick = async ()=>{
     if(currentTab==='issuelog') render();
   }catch(err){
     $('#issueFormMsg').innerHTML = '<div class="msg error">儲存失敗：'+err.message+'</div>';
+  }finally{
+    $('#issueFormSave').disabled = false;
+    $('#issueFormDelete').disabled = false;
+    $('#issueFormSave').textContent = '儲存';
+  }
+};
+
+$('#issueFormDelete').onclick = async ()=>{
+  if(currentIssueMode !== 'edit' || currentIssueRow===null) return;
+  const r = issueLogRowsCache.find(x=>String(x._row)===String(currentIssueRow));
+  const label = r ? (r['TRACK NO.']||'這筆') : '這筆';
+  if(!confirm(`確定要刪除 ${label} 這筆問題追蹤紀錄嗎？刪除後無法復原。`)) return;
+
+  $('#issueFormMsg').innerHTML = '';
+  $('#issueFormSave').disabled = true;
+  $('#issueFormDelete').disabled = true;
+  $('#issueFormDelete').textContent = '刪除中…';
+  try{
+    await callApi({ action:'deleteIssueLog', row: currentIssueRow });
+    // 刪除會讓 Google Sheet 底下的列往上遞補，其他列的 _row 都會跟著變，
+    // 所以刪除後一定整包重新抓一次資料，不做局部更新。
+    await fetchData();
+    closeIssueFormModal();
+    if(currentTab==='issuelog') render();
+  }catch(err){
+    $('#issueFormMsg').innerHTML = '<div class="msg error">刪除失敗：'+err.message+'</div>';
+  }finally{
+    $('#issueFormSave').disabled = false;
+    $('#issueFormDelete').disabled = false;
+    $('#issueFormDelete').textContent = '刪除這筆';
   }
 };
 
