@@ -1221,7 +1221,7 @@ function renderIssueLog(){
   drawIssueRows(rows);
 }
 
-const ISSUE_LOG_WRAP_COLS = ['最後一階（資料自動帶入）','機器目前狀態追蹤','LINE上聊天室名稱','更換零件名稱','NID備品寄給維修人/店的時間'];
+const ISSUE_LOG_WRAP_COLS = ['最後一階（資料自動帶入）','機器目前狀態追蹤','LINE上聊天室名稱','更換零件名稱','NID備品寄給維修人/店的時間','機器編號'];
 
 function drawIssueRows(rows){
   const q = ($('#issueSearch').value||'').toLowerCase();
@@ -1261,15 +1261,15 @@ const ISSUE_FIELD_CONFIG = [
   { key:'機器目前狀態追蹤', type:'text' },
   { key:'LINE上聊天室名稱', type:'text' },
   { key:'PDCA', type:'select', options:['P','D','C','A'] },
-  { key:'NID備品寄給維修人/店的時間', type:'textarea', rows:6 },
-  { key:'更換零件名稱', type:'textarea', rows:6 },
+  { key:'NID備品寄給維修人/店的時間', type:'textarea', rows:9 },
+  { key:'更換零件名稱', type:'textarea', rows:9 },
   { type:'group', fields:[
-    { key:'機器編號', type:'text' },
-    { key:'機頭編號A01', type:'text' },
-    { key:'電箱編號A02', type:'text' }
+    { key:'機器編號', type:'textarea', rows:2 },
+    { key:'機頭編號A01', type:'textarea', rows:2 },
+    { key:'電箱編號A02', type:'textarea', rows:2 }
   ]},
-  { key:'人機組編號A03', type:'text' },
-  { key:'人機介面編號P04', type:'text' },
+  { key:'人機組編號A03', type:'textarea', rows:2 },
+  { key:'人機介面編號P04', type:'textarea', rows:2 },
   { key:'地區', type:'text' }
 ];
 
