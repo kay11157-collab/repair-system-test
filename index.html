@@ -1251,14 +1251,14 @@ const ISSUE_FIELD_CONFIG = [
   { key:'分類3', type:'select', options:ISSUE_CAT3 },
   { key:'分類4', type:'select', options:ISSUE_CAT4 },
   { key:'最後一階（資料自動帶入）', type:'readonly' },
-  { key:'問題敘述', type:'textarea', full:true },
-  { key:'排除歷程', type:'textarea', full:true },
-  { key:'備註', type:'textarea', full:true },
+  { key:'問題敘述', type:'textarea', full:true, rows:4 },
+  { key:'排除歷程', type:'textarea', full:true, rows:4 },
+  { key:'備註', type:'text' },
   { key:'LINE上聊天室名稱', type:'text' },
-  { key:'LINE聊天室對話內容', type:'textarea', full:true },
+  { key:'LINE聊天室對話內容', type:'textarea', full:true, rows:4 },
   { key:'機器目前狀態追蹤', type:'text' },
   { key:'NID備品寄給維修人/店的時間', type:'date' },
-  { key:'更換零件名稱', type:'textarea', full:true },
+  { key:'更換零件名稱', type:'textarea', rows:3 },
   { key:'PDCA', type:'select', options:['P','D','C','A'] },
   { key:'機器編號', type:'text' },
   { key:'機頭編號A01', type:'text' },
@@ -1286,7 +1286,7 @@ function issueFieldInputHtml(cfg, value){
     return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="date" data-field="${cfg.key}" value="${firstDateOnly(value)}"></div>`;
   }
   if(cfg.type === 'textarea'){
-    return `<div class="field"${spanStyle}><label>${cfg.key}</label><textarea data-field="${cfg.key}" rows="4">${safeVal.replace(/</g,'&lt;')}</textarea></div>`;
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><textarea data-field="${cfg.key}" rows="${cfg.rows||4}">${safeVal.replace(/</g,'&lt;')}</textarea></div>`;
   }
   return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="text" data-field="${cfg.key}" value="${escapeAttr(safeVal)}"></div>`;
 }
@@ -1313,7 +1313,28 @@ function openIssueDetailModal(rowIndex){
   $('#issueFormTitle').textContent = '編輯問題追蹤';
   $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG.map(cfg => issueFieldInputHtml(cfg, r[cfg.key])).join('');
   $('#issueFormMsg').innerHTML = '';
+  bindIssueCategoryLiveUpdate();
   $('#issueFormModal').classList.add('show');
+}
+
+// 分類1~4 只要一改，「最後一階」的顯示就跟著即時更新（畫面預覽用），
+// 實際存進 Google Sheet 的值仍然是按「儲存」時重新算一次，兩邊邏輯一致。
+function bindIssueCategoryLiveUpdate(){
+  ['分類1','分類2','分類3','分類4'].forEach(key=>{
+    const el = $(`#issueFormGrid [data-field="${CSS.escape(key)}"]`);
+    if(el) el.addEventListener('change', updateIssueLastLevelPreview);
+  });
+  updateIssueLastLevelPreview();
+}
+function updateIssueLastLevelPreview(){
+  const lastLevelEl = $(`#issueFormGrid [data-field="${CSS.escape('最後一階（資料自動帶入）')}"]`);
+  if(!lastLevelEl) return; // 新增問題的表單沒有這個欄位，不用處理
+  const data = {};
+  ['分類1','分類2','分類3','分類4'].forEach(key=>{
+    const el = $(`#issueFormGrid [data-field="${CSS.escape(key)}"]`);
+    data[key] = el ? el.value : '';
+  });
+  lastLevelEl.value = calcIssueLastLevel(data);
 }
 
 function closeIssueFormModal(){
