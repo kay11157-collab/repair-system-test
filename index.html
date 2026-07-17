@@ -1257,7 +1257,7 @@ const ISSUE_LOG_FULLWIDTH_FIELDS = ['問題敘述','排除歷程','備註','LINE
 // 每個欄位對應的輸入元件類型。TRACK NO. 跟「最後一階」是系統自動處理的欄位，
 // 新增時不會出現在表單裡；編輯時會顯示但鎖住（disabled），不能手動改。
 const ISSUE_FIELD_CONFIG = [
-  { key:'TRACK NO.', type:'readonly' },
+  { key:'TRACK NO.', type:'text' },
   { key:'店號', type:'text' },
   { key:'異常發生日期', type:'date' },
   { key:'分類1', type:'select', options:ISSUE_CAT1 },
