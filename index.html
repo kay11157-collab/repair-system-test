@@ -1006,13 +1006,18 @@ function drawIssueRows(rows){
   }).join('')}<td><button class="btn secondary" onclick="openIssueDetailModal('${r._row}')">詳情</button></td></tr>`).join('') : `<tr><td colspan="${ISSUE_LOG_LIST_COLS.length+1}" class="empty">目前沒有問題追蹤紀錄</td></tr>`;
 }
 
+// 這幾個欄位內容通常比較長，改成佔滿整行寬度（不跟旁邊欄位擠半版），
+// 顯示會變寬、變矮；其他短欄位會自動往下遞補、重新兩兩配對，不用手動排順序。
+const ISSUE_LOG_FULLWIDTH_FIELDS = ['問題敘述','排除歷程','備註','LINE聊天室對話內容'];
+
 function openIssueDetailModal(rowIndex){
   const r = issueLogRowsCache.find(x=>String(x._row)===String(rowIndex));
   if(!r) return;
   $('#issueDetailGrid').innerHTML = ISSUE_LOG_ALL_FIELDS.map(f=>{
     const v = r[f];
     const display = ISSUE_LOG_DATE_COLS.includes(f) ? fmtDate(v) : fmt(v);
-    return `<div class="info-card"><div class="info-label">${f}</div><div class="info-value">${display}</div></div>`;
+    const spanStyle = ISSUE_LOG_FULLWIDTH_FIELDS.includes(f) ? ' style="grid-column:1 / -1;"' : '';
+    return `<div class="info-card"${spanStyle}><div class="info-label">${f}</div><div class="info-value" style="white-space:pre-wrap;">${display}</div></div>`;
   }).join('');
   $('#issueDetailModal').classList.add('show');
 }
