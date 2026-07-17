@@ -325,16 +325,18 @@
   </div>
 </div>
 
-<!-- 店內機器問題追蹤詳情 modal：23 個欄位用兩欄並排呈現，不用左右滑動看 -->
-<div class="modal-backdrop" id="issueDetailModal">
+<!-- 店內機器問題追蹤：新增/編輯共用的表單 modal -->
+<div class="modal-backdrop" id="issueFormModal">
   <div class="modal detail-modal">
     <div class="detail-header">
-      <h3 style="margin:0;">問題追蹤詳情</h3>
-      <button class="modal-close" id="issueDetailModalClose">✕</button>
+      <h3 style="margin:0;" id="issueFormTitle">新增問題</h3>
+      <button class="modal-close" id="issueFormModalClose">✕</button>
     </div>
-    <div class="detail-info-grid" id="issueDetailGrid"></div>
+    <div id="issueFormMsg"></div>
+    <div class="detail-info-grid" id="issueFormGrid"></div>
     <div class="modal-actions">
-      <button class="btn secondary" id="issueDetailClose2">關閉</button>
+      <button class="btn secondary" id="issueFormCancel">取消</button>
+      <button class="btn" id="issueFormSave">儲存</button>
     </div>
   </div>
 </div>
@@ -953,6 +955,230 @@ function drawMachineRows(){
 // ---------- 店內機器問題追蹤（issue_log，取代 FCM1 那份 Google Sheet） ----------
 // 第一版：列表只顯示幾個關鍵欄位，其他 23 欄全部內容透過「詳情」彈出視窗看（兩欄並排，不用左右滑動）。
 // 新增/編輯功能之後再加。
+const ISSUE_CAT1 = [
+      '01_Power Box (FCM-A02) 電源箱',
+      '02_Machine Head (Main Body)(FCM-A01) 機頭',
+      '03_Trash Bin(FCM-A10) 垃圾筒',
+      '04_Auxiliary Devices (Compressor, Air Tank, Vacuum, etc.) 空壓機、儲氣桶、吸塵器',
+      '05_Human-machine Interface (HMI) (FCM-A03) 人機',
+      '06_Label Printer(FCM-A12) 標籤機',
+      '07_Tray(FCM-A11)',
+      '08_Air Control Panel 空壓控制面盤',
+      '09_其他',
+      '10_待確認',
+      '11_Wi-Fi Router'
+    ];
+
+const ISSUE_CAT2 = [
+      '01-04_Power Cord 電源線',
+      '01-05_Power Box I/O Panel 電源盒 I/O 面板',
+      '01-08_Door Lock 門鎖',
+      '01-10_電箱內',
+      '01-11_無電源',
+      '02-01_Hinge (FCM-P44) 鉸鏈',
+      '02-02_Lift Cover 上掀式護蓋',
+      '02-08_ Dial 旋鈕',
+      '02-09_Emergency Stop 緊急停止鈕',
+      '02-11_Saw Nut 鋸片螺帽',
+      '02-12_Saw Blade (FCM-P01) 鋸片',
+      '02-16_Clamp Cylinder 壓料氣缸',
+      '02-17_Clamp Movable Jaw 活動夾爪',
+      '02-18_Sliding Door 滑動門',
+      '02-19_Insert Door Sensor (FCM-P20)  滑門感測器',
+      '02-21_End Stop Module  擋尺組',
+      '02-23_Detector Sensor (FCM-P18) 偵測感測器',
+      '02-25_Feeding Pulley (Follower) 送料輪（從動輪）',
+      '02-28_Intermediate Air Supply Connectors (for the Cover) 外殼蓋相關的中間供氣接頭',
+      '02-29_機頭內漏氣',
+      '03-02_Safety Sensor(FCM-P21) 安全感應開關',
+      '04-01_Tank (FCM-P41) 儲氣桶',
+      '04-02_Vacuum (FCM-P40) 吸塵器',
+      '04-03_Air Compressor (FCM-A06) 空壓機',
+      '05-01_HMI Screen(FCM-P04) 人機介面螢幕',
+      '05-03_Barcode Scanner(FCM-P48) 條碼掃描器',
+      '05-08_USB Hub Plug USB 集線器插頭',
+      '05-11_HMI USB Hub(FCM-P49) HMI 專用 USB 集線器',
+      '05-12_HMI CON2/COM3',
+      '06-02_Label Outlet 標籤出口',
+      '06-04_Power Switch電源開關',
+      '06-06_人機顯示未偵測到條碼機',
+      '06-08_標籤機列印異常',
+      '07-01_Left Tray  左托盤',
+      '07-03_Right Skirt Plate 右裙板',
+      '07-04_Dual-button Start(FCM-P14) 雙鍵裁切按鈕',
+      '07-08_Dual-button Start Wiring 雙鍵裁切按鈕配線',
+      '07-09_出貨零件受損',
+      '08-01_Solenoid Valve Group 電磁閥組合',
+      '08-04_Main Pressure Regulator  主壓力調節器',
+      '08-12_空壓控制面盤漏氣',
+      '09-01_出貨缺件',
+      '09-02_貨架尺寸不對',
+      '09-03_裁切異常',
+      '09-04_商店內電源問題',
+      '09-05_MET安裝不良',
+      '09-06_供應商來料不良',
+      '09-07_更換舊式掃瞄器',
+      '09-08_漏電',
+      '11-01_網路問題'
+    ];
+
+const ISSUE_CAT3 = [
+      '01-05-04_PLC-ENT  PLC 控制主機',
+      '01-05-05_HMI-110V 人機電源',
+      '01-05-08_Vacuum 吸塵器',
+      '01-05-09_Air-Compressor 空壓機',
+      '01-05-10_Servo-PWR  伺服電源',
+      '01-08-01_鑰匙',
+      '01-10-01_漏電斷路器跳脫',
+      '01-10-02_伺服驅動器',
+      '01-10-03_步進驅動器',
+      '01-10-04_PLC',
+      '01-10-05_安全繼電器',
+      '01-10-06_保險絲',
+      '01-10-08_變壓器',
+      '01-10-10_電磁接觸器作動不良',
+      '01-10-11_插座',
+      '02-01-01_Hinge 分離',
+      '02-02-01_LED Tube LED 燈',
+      '02-02-03_Lift Cover Support 護蓋支撐架',
+      '02-02-04_掀蓋開合異常',
+      '02-02-09_Lock Cylinder  鎖栓',
+      '02-08-01_擋尺移動異常',
+      '02-09-01_接頭鬆脫',
+      '02-09-02_遺失',
+      '02-09-03_損壞',
+      '02-11-01_遺失',
+      '02-12-01_鋸齒受損',
+      '02-12-02_產品裁切不良',
+      '02-12-03_無法移動',
+      '02-12-06_進給馬達發出異音',
+      '02-16-01_夾持氣缸連接板鬆脫',
+      '02-17-01_夾持作動行程異常',
+      '02-18-01 變形',
+      '02-18-02_缺件',
+      '02-21-01_擋料近接開關故障',
+      '02-23-01_擋尺偵測異常',
+      '02-25-01_繩索脫落',
+      '02-28-01_Lock Cylin Hose 鎖心氣管',
+      '03-02-01_M8連接器不良',
+      '03-02-02_M8連接器接頭沒鎖到位',
+      '04-01-01_Header 壓力錶',
+      '04-01-02_Connector(with tube)(to Air Compress)  接頭（含軟管，接空壓機）',
+      '04-01-04_Connector(to Machine head) 接頭（至機台頭部）',
+      '04-02-01_POWER Switch 電源開關',
+      '04-02-02_Vacuum Hose 吸塵軟管',
+      '04-02-04_Cover 蓋子',
+      '04-02-05_吸力不足',
+      '04-02-06_吸塵器無法啟動',
+      '04-02-07_濾網破洞',
+      '04-02-08_其它',
+      '04-03-01_Connector (to Tank) 接頭（至儲氣桶）',
+      '04-03-02_Header (Output) 壓力錶—輸出端',
+      '04-03-05_POWER Switch 電源開關',
+      '04-03-08_空壓機逆止閥異常',
+      '04-03-09_Release tube (to solenoid valve) 排氣管（至電磁閥）',
+      '04-03-12_空壓機無法啟動',
+      '04-03-13_噪音',
+      '04-03-15_空壓機閥門未開',
+      '05-01-02_檔尺歸零無法校正',
+      '05-01-03_人機更新失敗',
+      '05-01-05_流程卡住',
+      '05-01-06_鋸切中',
+      '05-01-07_Passcode Screen無法登入',
+      '05-01-08_人機異常錯誤碼',
+      '05-01-11_UI異常碼：馬達故障(AL003)',
+      '05-01-12_UI異常碼：垃圾桶遺失(AL004)',
+      '05-01-13_MET 安裝損壞',
+      '05-01-15_裁切資料LOG檔下載失敗',
+      '05-03-01_掃描無反應',
+      '05-03-02_線材斷掉',
+      '05-12-01_線材斷掉',
+      '06-02-01_紙張沒有跑出來',
+      '06-02-02_列印內容空白',
+      '06-04-01_過熱冒煙',
+      '06-04-02_無電源',
+      '07-01-01_出貨零件受損',
+      '07-03-01_螺絲尺寸不對',
+      '07-04-02_指示燈外殼掉落',
+      '07-04-03_異常錯誤碼_AL-024',
+      '07-08-01_線材斷掉',
+      '07-08-02_線材鬆掉',
+      '07-08-03_接線錯誤',
+      '08-01-03_Dial Lock',
+      '08-01-04_Cover Lock漏氣',
+      '08-04-01_漏氣',
+      '09-03-01_裁切尺寸不準',
+      '09-03-02_SKUs配方表問題',
+      '09-03-03_機台起火',
+      '09-04-02_斷路器一直跳脫',
+      '09-05-01_插頭插錯',
+      '09-06-01_延長線不良',
+      '09-06-02_網路線不良',
+      '11-01-01_Internet無法連線'
+    ];
+
+const ISSUE_CAT4 = [
+      '01-05-04-01_損壞',
+      '01-05-04-02_沒連接',
+      '01-05-08-01_無電源',
+      '01-05-10-01_伺服動力線端子鬆脫',
+      '01-10-01-01_一直跳脫',
+      '01-10-02-01_面板無顯示',
+      '01-10-02-02_鋸切馬達錯誤碼AL 001',
+      '01-10-02-04_鋸切馬達錯誤碼AL 011',
+      '01-10-02-05_鋸切馬達錯誤碼AL 012',
+      '01-10-02-06_鋸切馬達錯誤碼AL 013',
+      '01-10-02-07_鋸切馬達錯誤碼AL 035',
+      '01-10-02-08_鋸切馬達錯誤碼AL 009',
+      '01-10-02-09_鋸切馬達錯誤碼AL 033',
+      '01-10-03-01_步進馬達驅動板解析度設定錯誤',
+      '01-10-04-04_錯誤：ERROR燈亮起',
+      '01-10-04-05_更新失敗',
+      '01-10-05-02_狀態燈未全亮',
+      '01-10-06-01_保險絲熔斷',
+      '01-10-06-02_保險絲脫落',
+      '01-10-08-01_脫落',
+      '01-10-11-03_110V插座無電源輸出',
+      '02-02-01-01_夾子損壞',
+      '02-02-01-02_燈具損壞',
+      '02-08-01-01_擋尺偵測氣缸脫落',
+      '02-08-02-01_氣缸氣管漏氣',
+      '02-28-01-01_鎖心氣管漏氣',
+      '04-01-02-01_ 儲氣桶漏氣',
+      '04-01-02-02_軟管接頭遺失',
+      '04-01-04-01接頭遺失',
+      '04-02-02-01_受損',
+      '04-02-02-02_缺件',
+      '04-02-08-01_靜電問題',
+      '04-03-09-01_空壓機氣管破洞',
+      '05-01-03-01_插入USB沒反應',
+      '05-01-03-02_顯示錯誤碼',
+      '05-01-03-03_資料下載時間過長',
+      '05-01-03-04_插入SD卡沒反應',
+      '05-01-05-01_按下Dual-Button無反應',
+      '05-01-05-04_程式未更新到最新版',
+      '05-01-06-01_鋸片沒有移動',
+      '05-01-06-02_產品沒有裁切完成',
+      '05-01-06-03_鋸片沒有轉動',
+      '05-01-06-04_鋸片CLICK 聲',
+      '05-01-06-05_鋸切不順',
+      '05-01-08-01_Unexpected error occurred',
+      '05-01-08-02_Unexpected error occurred (9)',
+      '05-01-08-03_Read Error 3',
+      '05-01-08-06_HMI Disk is almost full.',
+      '05-01-08-07_SD Disk is almost full',
+      '05-01-08-09_Error Sig 11 Code 1 Atl libQt5Gui',
+      '05-01-08-10_COMMUNICATION ERROR 3',
+      '05-01-11-01_鋸切馬達錯誤碼0',
+      '05-01-11-03_鋸切馬達錯誤碼AL 006',
+      '05-01-11-04_鋸切馬達錯誤碼AL 011',
+      '05-01-11-09_鋸切馬達錯誤碼AL 09F',
+      '05-01-12-01_無法排除',
+      '05-01-15-01_流程卡住',
+      '08-01-03-02_線接不正確'
+    ];
+
+
 const ISSUE_LOG_ALL_FIELDS = [
   'TRACK NO.','店號','異常發生日期','分類1','分類2','分類3','分類4',
   '最後一階（資料自動帶入）','問題敘述','排除歷程','備註',
@@ -978,6 +1204,9 @@ function renderIssueLog(){
         <input type="text" id="issueSearch" placeholder="搜尋店號或 TRACK NO.">
         <span class="page-info" id="issueCount"></span>
       </div>
+      <div style="margin:14px 0;">
+        <button class="btn" id="addIssueBtn">＋ 新增問題</button>
+      </div>
       <div class="table-wrap" style="max-height:70vh;"><table>
         <thead><tr>${ISSUE_LOG_LIST_COLS.map(c=>`<th>${c}</th>`).join('')}<th>詳情</th></tr></thead>
         <tbody id="issueRows"></tbody>
@@ -985,6 +1214,7 @@ function renderIssueLog(){
     </div>
   `;
   $('#issueSearch').oninput = debounce(()=>drawIssueRows(rows));
+  $('#addIssueBtn').onclick = openIssueAddModal;
   drawIssueRows(rows);
 }
 
@@ -1010,17 +1240,120 @@ function drawIssueRows(rows){
 // 顯示會變寬、變矮；其他短欄位會自動往下遞補、重新兩兩配對，不用手動排順序。
 const ISSUE_LOG_FULLWIDTH_FIELDS = ['問題敘述','排除歷程','備註','LINE聊天室對話內容'];
 
+// 每個欄位對應的輸入元件類型。TRACK NO. 跟「最後一階」是系統自動處理的欄位，
+// 新增時不會出現在表單裡；編輯時會顯示但鎖住（disabled），不能手動改。
+const ISSUE_FIELD_CONFIG = [
+  { key:'TRACK NO.', type:'readonly' },
+  { key:'店號', type:'text' },
+  { key:'異常發生日期', type:'date' },
+  { key:'分類1', type:'select', options:ISSUE_CAT1 },
+  { key:'分類2', type:'select', options:ISSUE_CAT2 },
+  { key:'分類3', type:'select', options:ISSUE_CAT3 },
+  { key:'分類4', type:'select', options:ISSUE_CAT4 },
+  { key:'最後一階（資料自動帶入）', type:'readonly' },
+  { key:'問題敘述', type:'textarea', full:true },
+  { key:'排除歷程', type:'textarea', full:true },
+  { key:'備註', type:'textarea', full:true },
+  { key:'LINE上聊天室名稱', type:'text' },
+  { key:'LINE聊天室對話內容', type:'textarea', full:true },
+  { key:'機器目前狀態追蹤', type:'text' },
+  { key:'NID備品寄給維修人/店的時間', type:'date' },
+  { key:'更換零件名稱', type:'textarea', full:true },
+  { key:'PDCA', type:'select', options:['P','D','C','A'] },
+  { key:'機器編號', type:'text' },
+  { key:'機頭編號A01', type:'text' },
+  { key:'電箱編號A02', type:'text' },
+  { key:'人機組編號A03', type:'text' },
+  { key:'人機介面編號P04', type:'text' },
+  { key:'地區', type:'text' }
+];
+
+function escapeAttr(s){ return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function issueFieldInputHtml(cfg, value){
+  const safeVal = (value===null||value===undefined) ? '' : String(value);
+  const spanStyle = cfg.full ? ' style="grid-column:1 / -1;"' : '';
+  if(cfg.type === 'readonly'){
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="text" data-field="${cfg.key}" value="${escapeAttr(safeVal)}" disabled></div>`;
+  }
+  if(cfg.type === 'select'){
+    const opts = ['<option value="">（未選擇）</option>'].concat(
+      cfg.options.map(o=>`<option value="${escapeAttr(o)}" ${o===safeVal?'selected':''}>${o}</option>`)
+    );
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><select data-field="${cfg.key}">${opts.join('')}</select></div>`;
+  }
+  if(cfg.type === 'date'){
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="date" data-field="${cfg.key}" value="${firstDateOnly(value)}"></div>`;
+  }
+  if(cfg.type === 'textarea'){
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><textarea data-field="${cfg.key}" rows="4">${safeVal.replace(/</g,'&lt;')}</textarea></div>`;
+  }
+  return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="text" data-field="${cfg.key}" value="${escapeAttr(safeVal)}"></div>`;
+}
+
+let currentIssueMode = 'add'; // 'add' | 'edit'
+let currentIssueRow = null;
+
+function openIssueAddModal(){
+  currentIssueMode = 'add';
+  currentIssueRow = null;
+  $('#issueFormTitle').textContent = '新增問題';
+  $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG
+    .filter(cfg => cfg.key!=='TRACK NO.' && cfg.key!=='最後一階（資料自動帶入）') // 這兩個新增時不用填，系統自動處理
+    .map(cfg => issueFieldInputHtml(cfg, '')).join('');
+  $('#issueFormMsg').innerHTML = '';
+  $('#issueFormModal').classList.add('show');
+}
+
 function openIssueDetailModal(rowIndex){
   const r = issueLogRowsCache.find(x=>String(x._row)===String(rowIndex));
   if(!r) return;
-  $('#issueDetailGrid').innerHTML = ISSUE_LOG_ALL_FIELDS.map(f=>{
-    const v = r[f];
-    const display = ISSUE_LOG_DATE_COLS.includes(f) ? fmtDate(v) : fmt(v);
-    const spanStyle = ISSUE_LOG_FULLWIDTH_FIELDS.includes(f) ? ' style="grid-column:1 / -1;"' : '';
-    return `<div class="info-card"${spanStyle}><div class="info-label">${f}</div><div class="info-value" style="white-space:pre-wrap;">${display}</div></div>`;
-  }).join('');
-  $('#issueDetailModal').classList.add('show');
+  currentIssueMode = 'edit';
+  currentIssueRow = rowIndex;
+  $('#issueFormTitle').textContent = '編輯問題追蹤';
+  $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG.map(cfg => issueFieldInputHtml(cfg, r[cfg.key])).join('');
+  $('#issueFormMsg').innerHTML = '';
+  $('#issueFormModal').classList.add('show');
 }
+
+function closeIssueFormModal(){
+  $('#issueFormModal').classList.remove('show');
+}
+$('#issueFormModalClose').onclick = closeIssueFormModal;
+$('#issueFormCancel').onclick = closeIssueFormModal;
+$('#issueFormModal').addEventListener('click', (e)=>{ if(e.target.id==='issueFormModal') closeIssueFormModal(); });
+
+// 依分類4→3→2→1 的順序，拿有填的那一層當「最後一階」，跟 Google Sheet 原本的公式邏輯一樣
+function calcIssueLastLevel(data){
+  return data['分類4'] || data['分類3'] || data['分類2'] || data['分類1'] || '';
+}
+
+$('#issueFormSave').onclick = async ()=>{
+  const data = {};
+  $$('#issueFormGrid [data-field]').forEach(el=>{
+    if(el.disabled) return; // TRACK NO./最後一階 是唯讀，不送出去覆蓋
+    data[el.dataset.field] = el.value || null;
+  });
+  data['最後一階（資料自動帶入）'] = calcIssueLastLevel(data) || null;
+
+  $('#issueFormMsg').innerHTML = '';
+  try{
+    if(currentIssueMode === 'add'){
+      await callApi({ action:'addIssueLog', data });
+      // 新增這筆的實際列號要重新整包抓一次才會準確（自動編號、_row 都是後端算的），
+      // 新增動作不像編輯那麼頻繁，這裡用完整重抓確保資料正確。
+      await fetchData();
+    } else {
+      await callApi({ action:'updateIssueLog', row: currentIssueRow, data });
+      const r = issueLogRowsCache.find(x=>String(x._row)===String(currentIssueRow));
+      if(r) Object.assign(r, data);
+    }
+    closeIssueFormModal();
+    if(currentTab==='issuelog') render();
+  }catch(err){
+    $('#issueFormMsg').innerHTML = '<div class="msg error">儲存失敗：'+err.message+'</div>';
+  }
+};
 
 function renderInventory(){
   const rows = DATA.inventory || [];
@@ -1186,13 +1519,6 @@ function closeRepairDetailModal(){
 $('#repairDetailModalClose').onclick = closeRepairDetailModal;
 $('#repairDetailCancel').onclick = closeRepairDetailModal;
 $('#repairDetailModal').addEventListener('click', (e)=>{ if(e.target.id==='repairDetailModal') closeRepairDetailModal(); });
-
-function closeIssueDetailModal(){
-  $('#issueDetailModal').classList.remove('show');
-}
-$('#issueDetailModalClose').onclick = closeIssueDetailModal;
-$('#issueDetailClose2').onclick = closeIssueDetailModal;
-$('#issueDetailModal').addEventListener('click', (e)=>{ if(e.target.id==='issueDetailModal') closeIssueDetailModal(); });
 
 $('#repairDetailSave').onclick = async ()=>{
   if(currentRepairRow===null) return;
