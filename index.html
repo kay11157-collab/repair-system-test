@@ -961,7 +961,10 @@ const ISSUE_LOG_ALL_FIELDS = [
 ];
 const ISSUE_LOG_DATE_COLS = ['異常發生日期','NID備品寄給維修人/店的時間'];
 // 列表要顯示的關鍵欄位（其他欄位點「詳情」才看得到）
-const ISSUE_LOG_LIST_COLS = ['TRACK NO.','店號','異常發生日期','最後一階（資料自動帶入）','機器目前狀態追蹤','PDCA'];
+const ISSUE_LOG_LIST_COLS = [
+  'TRACK NO.','店號','異常發生日期','最後一階（資料自動帶入）','機器目前狀態追蹤','PDCA',
+  'LINE上聊天室名稱','機器編號','更換零件名稱','NID備品寄給維修人/店的時間','地區'
+];
 
 let issueLogRowsCache = [];
 
@@ -984,7 +987,7 @@ function renderIssueLog(){
   drawIssueRows(rows);
 }
 
-const ISSUE_LOG_TRUNCATE_COLS = ['最後一階（資料自動帶入）','機器目前狀態追蹤'];
+const ISSUE_LOG_TRUNCATE_COLS = ['最後一階（資料自動帶入）','機器目前狀態追蹤','LINE上聊天室名稱','更換零件名稱'];
 
 function drawIssueRows(rows){
   const q = ($('#issueSearch').value||'').toLowerCase();
