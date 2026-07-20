@@ -1642,8 +1642,15 @@ $('#repairDetailSave').onclick = async ()=>{
 };
 
 // ---------- 新增維修紀錄 ----------
+// 依實際資料算出目前用過的所有機器狀態，跟維修紀錄篩選標籤用同一套邏輯，
+// 以後資料裡出現新的狀態值，這裡也會自動列出來，不用手動維護清單。
+function getRepairStatusOptions(){
+  const statusSet = new Set((DATA.repair_log||[]).map(r=>getField(r,'機器狀態')).filter(Boolean));
+  return REPAIR_STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!REPAIR_STATUS_ORDER.includes(s)).sort());
+}
+
 const REPAIR_ADD_FIELD_CONFIG = [
-  { key:'機器狀態', type:'select', options:['待維修','維修完成','無法維修'] },
+  { key:'機器狀態', type:'select', options:[] },
   { key:'機器編號', type:'text' },
   { key:'店號', type:'text' },
   { key:'案件編號', type:'text' },
@@ -1656,12 +1663,13 @@ const REPAIR_ADD_FIELD_CONFIG = [
   { key:'檢修問題', type:'textarea', full:true, rows:4 },
   { key:'更換零件', type:'textarea', rows:3 },
   { key:'檢修完成日期', type:'date' },
-  { key:'檢修人員', type:'select', options:settingValues('operator') }
+  { key:'檢修人員', type:'select', options:[] }
 ];
 
 function openRepairAddModal(){
-  // 檢修人員的選項清單是從 settings 分頁抓的，每次打開都重新抓一次，確保是最新名單
+  // 機器狀態、檢修人員的選項清單每次打開都重新抓一次，確保是最新資料
   const cfg = REPAIR_ADD_FIELD_CONFIG.map(c=>{
+    if(c.key==='機器狀態') return Object.assign({}, c, { options: getRepairStatusOptions() });
     if(c.key==='檢修人員') return Object.assign({}, c, { options: settingValues('operator') });
     return c;
   });
