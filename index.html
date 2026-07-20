@@ -1,626 +1,1841 @@
-/**
- * 機台維修管理系統 - Google Apps Script 後端
- *
- * 部署方式：
- * 1. 打開你的 Google Sheet（機台維修記錄）
- * 2. 上方選單「擴充功能」→「Apps Script」
- * 3. 把這個檔案的內容整個貼進去（覆蓋原本的 Code.gs 內容）
- * 4. 右上角「部署」→「新增部署作業」
- *    - 類型選「網頁應用程式」
- *    - 執行身分：我 (你自己的帳號)
- *    - 存取權限：任何人
- * 5. 部署後會拿到一個網址，例如：
- *    https://script.google.com/macros/s/AKfycb.../exec
- *    這個網址就是要貼到前端網頁「設定 API 位址」的地方
- * 6. 之後如果修改了這份程式碼，要記得「管理部署作業」→ 編輯 → 新版本，否則網址內容不會更新
- */
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 避免瀏覽器把這個頁面整包快取起來，導致每次更新 GitHub Pages 上的檔案後
+     還要重新整理好幾次才會真的載到新版本。 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>機台維修管理系統</title>
+<style>
+  :root{
+    --bg:#F5F6F5;
+    --panel:#FFFFFF;
+    --ink:#1E2421;
+    --ink-soft:#5B655F;
+    --line:#DDE2DE;
+    --brand:#2F6F4E;
+    --brand-soft:#E6F0EA;
+    --warn:#B8542A;
+    --warn-soft:#FBEAE0;
+    --danger:#B23A3A;
+    --radius:10px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);}
+  header{
+    background:var(--panel);border-bottom:1px solid var(--line);
+    padding:16px 24px;display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:10;
+  }
+  header h1{font-size:18px;margin:0;font-weight:700;}
+  header .sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  #apiBtn{
+    border:1px solid var(--line);background:var(--panel);border-radius:8px;
+    padding:8px 14px;font-size:13px;cursor:pointer;color:var(--ink-soft);
+  }
+  #apiBtn:hover{border-color:var(--brand);color:var(--brand);}
+  nav{display:flex;gap:4px;padding:12px 24px 0;background:var(--panel);border-bottom:1px solid var(--line);}
+  nav button{
+    border:none;background:transparent;padding:10px 16px;font-size:14px;cursor:pointer;
+    color:var(--ink-soft);border-bottom:2px solid transparent;font-weight:600;
+  }
+  nav button.active{color:var(--brand);border-bottom-color:var(--brand);}
+  main{padding:24px 32px;max-width:1800px;margin:0 auto;}
+  .grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+  .stat-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .stat-card .label{font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .stat-card .value{font-size:26px;font-weight:700;}
+  .stat-card .note{font-size:11px;color:var(--ink-soft);margin-top:4px;}
+  .stat-card.warn .value{color:var(--warn);}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+  input[type=text],select{
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;color:var(--ink);
+  }
+  .btn{
+    border:none;background:var(--brand);color:#fff;padding:8px 16px;border-radius:8px;
+    font-size:13px;cursor:pointer;font-weight:600;
+  }
+  .btn:hover{opacity:.9;}
+  .btn.secondary{background:var(--panel);color:var(--brand);border:1px solid var(--brand);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th{color:var(--ink-soft);font-weight:600;font-size:12px;position:sticky;top:0;background:var(--panel);}
+  tbody tr:hover{background:var(--bg);}
+  .table-wrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px;}
+  .truncate-cell{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .wrap-cell{max-width:220px;white-space:pre-wrap;word-break:normal;overflow-wrap:break-word;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;background:var(--brand-soft);color:var(--brand);}
+  .badge.low{background:var(--warn-soft);color:var(--warn);}
+  .empty{color:var(--ink-soft);font-size:13px;padding:30px;text-align:center;}
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(20,24,22,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{background:#fff;border-radius:var(--radius);padding:22px;width:100%;max-width:480px;max-height:88vh;overflow:auto;}
+  .modal h3{margin-top:0;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .msg{font-size:12px;padding:10px 12px;border-radius:8px;margin-bottom:12px;}
+  .msg.error{background:var(--warn-soft);color:var(--warn);}
+  .msg.ok{background:var(--brand-soft);color:var(--brand);}
+  .loading{text-align:center;color:var(--ink-soft);padding:40px;font-size:13px;}
+  .pagination{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+  .page-info{font-size:12px;color:var(--ink-soft);}
+  .page-controls{display:flex;align-items:center;gap:6px;}
+  .page-num{font-size:13px;color:var(--ink-soft);padding:0 6px;white-space:nowrap;}
+  .btn.secondary:disabled{opacity:.4;cursor:not-allowed;}
 
-const SHEET_NAMES = {
-  MACHINES: 'machines',
-  INVENTORY: 'inventory',
-  REPAIR_LOG: 'repair_log',
-  INVENTORY_LOG: 'inventory_log',
-  SETTINGS: 'settings',
-  MACHINE_LOG: 'machine_log',
-  MACHINE_EVENTS: 'machine_events',
-  ISSUE_LOG: 'issue_log'
-};
+  .type-block{margin-bottom:20px;}
+  .type-block:last-child{margin-bottom:0;}
+  .type-block-header{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px;}
+  .type-block-header .type-total{font-weight:400;font-size:12px;color:var(--ink-soft);margin-left:4px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--brand);display:inline-block;}
+  .type-dot{background:#3B6FD1;}
+  .status-pill-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .status-pill{
+    display:inline-flex;align-items:center;gap:6px;
+    border-radius:100px;padding:6px 12px;font-size:12px;font-weight:600;
+  }
+  .status-pill .dot{width:6px;height:6px;}
+  .status-pill b{font-size:14px;margin-left:2px;}
 
-// issue_log 分頁（店內機器問題追蹤）固定欄位順序，取代 FCM1 那份 Google Sheet 用
-const ISSUE_LOG_HEADERS = [
-  'TRACK NO.', '店號', '異常發生日期', '分類1', '分類2', '分類3', '分類4',
-  '最後一階（資料自動帶入）', '問題敘述', '排除歷程', '備註',
-  'LINE上聊天室名稱', 'LINE聊天室對話內容', '機器目前狀態追蹤',
-  'NID備品寄給維修人/店的時間', '更換零件名稱', 'PDCA',
-  '機器編號', '機頭編號A01', '電箱編號A02', '人機組編號A03', '人機介面編號P04', '地區'
+  .repair-layout{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start;}
+  @media (max-width:900px){ .repair-layout{grid-template-columns:1fr;} }
+  .low-stock-panel{position:sticky;top:80px;}
+  .low-stock-item{padding:10px 0;border-bottom:1px solid var(--line);}
+  .low-stock-item:last-child{border-bottom:none;}
+  .low-stock-name{font-size:13px;font-weight:600;}
+  .low-stock-meta{font-size:11px;color:var(--ink-soft);margin:2px 0 4px;}
+  .low-stock-qty{font-size:12px;color:var(--ink-soft);}
+  .detail-table{width:100%;border-collapse:collapse;}
+  .detail-table td{padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top;}
+  .detail-table .detail-label{color:var(--ink-soft);width:40%;font-weight:600;}
+
+  .detail-modal{max-width:820px;}
+  .repair-detail-modal{max-width:760px;}
+  .detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .modal-close{border:none;background:transparent;font-size:18px;cursor:pointer;color:var(--ink-soft);line-height:1;}
+  .modal-close:hover{color:var(--ink);}
+
+  .stepper{display:flex;align-items:flex-start;overflow-x:auto;padding:6px 2px 14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
+  .step{display:flex;flex-direction:column;align-items:center;width:64px;flex-shrink:0;}
+  .step-circle{
+    width:22px;height:22px;border-radius:50%;background:var(--bg);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--ink-soft);
+  }
+  .step-active .step-circle{border:none;}
+  .step-label{font-size:9px;color:var(--ink-soft);text-align:center;margin-top:5px;line-height:1.3;white-space:normal;word-break:break-word;}
+  .step-active .step-label{color:var(--ink);font-weight:700;}
+  .step-line{width:6px;height:1px;background:var(--line);margin:10px 0 0;flex-shrink:0;}
+
+  .detail-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+  .issue-form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+  @media (max-width:700px){ .issue-form-grid{grid-template-columns:1fr 1fr;} }
+  .issue-form-modal{max-width:960px;}
+  .info-card{background:var(--bg);border-radius:8px;padding:10px 12px;}
+  .info-label{font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
+  .info-value{font-size:14px;font-weight:600;}
+
+  .update-status-box{background:var(--brand-soft);border-radius:10px;padding:16px;margin-bottom:16px;}
+  .update-status-box .field label{color:var(--brand);}
+
+  .issue-box{background:var(--bg);border-radius:10px;padding:14px 16px;}
+  .issue-header{display:flex;justify-content:space-between;align-items:center;}
+
+  .filter-pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .filter-pill{
+    border:1px solid transparent;background:var(--pill-bg, #F0F2F4);color:var(--pill-fg, var(--ink-soft));
+    border-radius:100px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;
+    transition:box-shadow .12s,filter .12s;
+  }
+  .filter-pill:hover{filter:brightness(0.96);}
+  .filter-pill.active{box-shadow:0 0 0 2px var(--pill-fg, var(--brand)) inset;}
+
+  .timeline{max-height:260px;overflow-y:auto;}
+  .tl-block{margin-bottom:16px;}
+  .tl-block:last-child{margin-bottom:0;}
+  .tl-block-title{font-size:12px;font-weight:700;color:var(--brand);margin-bottom:8px;}
+  .tl-item{position:relative;padding-left:16px;padding-bottom:10px;border-left:2px solid var(--line);margin-left:2px;}
+  .tl-item:last-child{padding-bottom:0;border-left:2px solid transparent;}
+  .tl-dot{position:absolute;left:-6px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 1px var(--brand);}
+  .tl-event{font-size:13px;font-weight:600;}
+  .tl-meta{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>機台維修管理系統</h1>
+    <div class="sub" id="statusLine">尚未連線</div>
+  </div>
+  <button id="apiBtn">設定 API 位址</button>
+</header>
+
+<nav id="tabs">
+  <button data-tab="dashboard" class="active">總覽</button>
+  <button data-tab="machines">機台總覽</button>
+  <button data-tab="issuelog">店內機器問題追蹤</button>
+  <button data-tab="repair">維修紀錄</button>
+  <button data-tab="inventory">備品庫存</button>
+  <button data-tab="lowstock">低庫存零件</button>
+</nav>
+
+<main id="main">
+  <div class="loading">請先設定 Google Apps Script 的 API 位址</div>
+</main>
+
+<!-- API 設定 modal -->
+<div class="modal-backdrop" id="apiModal">
+  <div class="modal">
+    <h3>設定 API 位址</h3>
+    <p style="font-size:13px;color:var(--ink-soft);">請貼上你部署 Google Apps Script 網頁應用程式後拿到的網址（結尾通常是 <code>/exec</code>）。</p>
+    <div class="field">
+      <label>Apps Script Web App 網址</label>
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxx/exec">
+    </div>
+    <div id="apiMsg"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="apiCancel">取消</button>
+      <button class="btn" id="apiSave">儲存並連線</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增機台 modal -->
+<div class="modal-backdrop" id="machineModal">
+  <div class="modal">
+    <h3>新增機台</h3>
+    <div id="machineMsg"></div>
+    <div class="field">
+      <label>機台序號 (sn) *</label>
+      <input type="text" id="m_sn" placeholder="FCM-A01000001">
+    </div>
+    <div class="field">
+      <label>類型 (type) *</label>
+      <select id="m_type"></select>
+    </div>
+    <div class="field">
+      <label>狀態 (status) *</label>
+      <select id="m_status"></select>
+    </div>
+    <div class="field">
+      <label>店號 (store_no)</label>
+      <input type="text" id="m_store_no">
+    </div>
+    <div class="field">
+      <label>問題描述 (issue)</label>
+      <input type="text" id="m_issue">
+    </div>
+    <div class="field">
+      <label>負責人 (owner)</label>
+      <input type="text" id="m_owner">
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="machineCancel">取消</button>
+      <button class="btn" id="machineSave">新增</button>
+    </div>
+  </div>
+</div>
+
+<!-- 機台詳情 modal -->
+<div class="modal-backdrop" id="detailModal">
+  <div class="modal detail-modal">
+    <div class="detail-header">
+      <h3 id="detailModalTitle" style="margin:0;">機台詳情</h3>
+      <button class="modal-close" id="detailModalClose">✕</button>
+    </div>
+    <div class="stepper" id="detailStepper"></div>
+    <div class="detail-info-grid" id="detailInfoGrid"></div>
+
+    <div class="update-status-box">
+      <h4 style="margin:0 0 12px;color:var(--brand);">更新狀態</h4>
+      <div class="field"><label>切換狀態</label><select id="d_status"></select></div>
+      <div class="field"><label>操作人員</label><select id="d_operator"><option value="">請選擇</option></select></div>
+      <div class="field"><label>備註（本次操作）</label><input type="text" id="d_note" placeholder="填寫本步驟的操作備註"></div>
+      <div class="field"><label>更換零件（可空白）</label><input type="text" id="d_parts" placeholder="例如：驅動模組 A × 1"></div>
+    </div>
+
+    <div class="issue-box">
+      <div class="issue-header">
+        <span style="font-weight:700;">問題描述</span>
+        <button class="btn secondary" id="d_issueEditBtn">編輯</button>
+      </div>
+      <div id="d_issueText" style="margin-top:8px;font-size:13px;color:var(--ink);"></div>
+      <div id="d_issueEditRow" style="display:none;margin-top:8px;gap:8px;">
+        <input type="text" id="d_issueInput" style="width:100%;margin-bottom:8px;">
+        <button class="btn" id="d_issueSaveBtn">儲存問題描述</button>
+      </div>
+    </div>
+
+    <h4 style="margin:18px 0 10px;">機台生命週期時間軸</h4>
+    <div id="detailTimeline" class="timeline"></div>
+
+    <h4 style="margin:18px 0 10px;">操作記錄</h4>
+    <div class="table-wrap" style="max-height:220px;"><table>
+      <thead><tr><th>步驟</th><th>備註</th><th>零件</th><th>操作人</th><th>時間</th></tr></thead>
+      <tbody id="detailLogRows"></tbody>
+    </table></div>
+
+    <div id="detailMsg"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="detailModalClose2">關閉</button>
+      <button class="btn" id="d_updateBtn">更新狀態</button>
+    </div>
+  </div>
+</div>
+
+<!-- 維修紀錄詳情 modal（第一版，欄位：機器問題／檢修問題／更換零件／檢修完成日期／檢修人員） -->
+<div class="modal-backdrop" id="repairDetailModal">
+  <div class="modal repair-detail-modal">
+    <div class="detail-header">
+      <h3 style="margin:0;">維修紀錄歷程</h3>
+      <button class="modal-close" id="repairDetailModalClose">✕</button>
+    </div>
+    <div id="repairDetailInfo" style="margin:10px 0 16px;font-size:13px;color:var(--ink-soft);"></div>
+    <div id="repairDetailMsg"></div>
+    <div class="field">
+      <label>機器問題</label>
+      <textarea id="rd_issue" rows="3" style="width:100%;"></textarea>
+    </div>
+    <div class="field">
+      <label>檢修問題</label>
+      <textarea id="rd_other_issue" rows="8" style="width:100%;"></textarea>
+    </div>
+    <div class="field">
+      <label>更換零件</label>
+      <textarea id="rd_parts" rows="4" style="width:100%;" placeholder="例如：驅動模組 A × 1"></textarea>
+    </div>
+    <div class="field">
+      <label>檢修完成日期</label>
+      <input type="date" id="rd_done_date">
+    </div>
+    <div class="field">
+      <label>檢修人員</label>
+      <select id="rd_operator"><option value="">請選擇</option></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="repairDetailCancel">取消</button>
+      <button class="btn" id="repairDetailSave">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增維修紀錄 modal -->
+<div class="modal-backdrop" id="repairAddModal">
+  <div class="modal detail-modal issue-form-modal">
+    <div class="detail-header">
+      <h3 style="margin:0;">新增維修紀錄</h3>
+      <button class="modal-close" id="repairAddModalClose">✕</button>
+    </div>
+    <div id="repairAddMsg"></div>
+    <div class="issue-form-grid" id="repairAddGrid"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="repairAddCancel">取消</button>
+      <button class="btn" id="repairAddSave">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 店內機器問題追蹤：新增/編輯共用的表單 modal -->
+<div class="modal-backdrop" id="issueFormModal">
+  <div class="modal detail-modal issue-form-modal">
+    <div class="detail-header">
+      <h3 style="margin:0;" id="issueFormTitle">新增問題</h3>
+      <button class="modal-close" id="issueFormModalClose">✕</button>
+    </div>
+    <div id="issueFormMsg"></div>
+    <div class="issue-form-grid" id="issueFormGrid"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="issueFormDelete" style="display:none;border-color:#B8752A;color:#B8752A;">刪除這筆</button>
+      <button class="btn secondary" id="issueFormCancel">取消</button>
+      <button class="btn" id="issueFormSave">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LS_KEY = 'repair_system_api_url';
+let API_URL = localStorage.getItem(LS_KEY) || '';
+let DATA = null;
+let currentTab = 'dashboard';
+
+// 固定的狀態顯示順序（所有類型都照這個順序排列，方便垂直比對）
+const STATUS_ORDER = [
+  'STORE', 'STORE - 異常', '台灣倉', '台灣維修中',
+  '在途 - 台灣 TO NID', '在途-NID TO 台灣',
+  'NID - 良品', 'NID - 待退回台灣', 'NLA - 良品'
 ];
 
-// ---------- machines 分頁欄位別名 ----------
-// 前端程式碼固定用 sn / type / status / store_no 這幾個英文 key 讀寫資料。
-// 如果你在 Google Sheet 把標題改成中文（例如「機器號」「類型」「狀態」「店號」），
-// 這裡列出「中文標題 → 英文 key」的對照，讀取時會自動轉成英文 key、寫入時會自動轉回中文標題。
-// 之後不管標題打中文還是英文，前端都不用改。
-// 注意：只會完全比對「店號」，不會影響「2-店號」「3-店號」這種二次循環欄位（那些是另一組獨立邏輯）。
-const MACHINE_ALT_HEADERS = {
-  sn: ['機器號', '機台號', '機台序號'],
-  type: ['類型'],
-  status: ['狀態'],
-  store_no: ['店號']
+// 每個狀態固定的顏色（背景色 / 文字色），全站統一使用
+const STATUS_COLORS = {
+  'STORE':              { bg:'#E6F0EA', fg:'#2F6F4E' }, // 綠
+  'STORE - 異常':        { bg:'#FBE0E0', fg:'#8A1F1F' }, // 深紅
+  '台灣倉':               { bg:'#E8F0FB', fg:'#2B5FA5' }, // 藍
+  '台灣維修中':            { bg:'#FBE7E7', fg:'#B23A3A' }, // 紅
+  '在途 - 台灣 TO NID':    { bg:'#FBEFDD', fg:'#B8752A' }, // 橙
+  '在途-NID TO 台灣':      { bg:'#FBEFDD', fg:'#B8752A' }, // 橙
+  'NID - 良品':           { bg:'#E1F5F0', fg:'#1F8A72' }, // 青
+  'NID - 待退回台灣':      { bg:'#F1E7FB', fg:'#7A3AB2' }, // 紫
+  'NLA - 良品':           { bg:'#EDEDED', fg:'#666666' }  // 灰
 };
-// 反查表：中文標題 -> 英文 key，讀資料時用
-const MACHINE_HEADER_TO_CANONICAL = {};
-Object.keys(MACHINE_ALT_HEADERS).forEach(function (canonical) {
-  MACHINE_ALT_HEADERS[canonical].forEach(function (alt) {
-    MACHINE_HEADER_TO_CANONICAL[alt] = canonical;
+const DEFAULT_STATUS_COLOR = { bg:'#E6F0EA', fg:'#2F6F4E' };
+
+// 維修紀錄（repair_log）的「機器狀態」是另外一組完全不同的狀態值，
+// 跟機台總覽的狀態不是同一套。這三種已知狀態維持有語意的顏色（橙=待處理/綠=完成/紅=無法維修），
+// 其他任何沒列在這裡的狀態值，會自動從下面的色盤裡分配一個還沒用過的顏色，確保每種狀態顏色都不同。
+const REPAIR_STATUS_ORDER = ['待維修', '維修完成', '無法維修'];
+const REPAIR_KNOWN_COLORS = {
+  '待維修':   { bg:'#FBEFDD', fg:'#B8752A' }, // 橙 - 還沒處理
+  '維修完成': { bg:'#E6F0EA', fg:'#2F6F4E' }, // 綠 - 已完成
+  '無法維修': { bg:'#FBE0E0', fg:'#8A1F1F' }  // 紅 - 無法維修
+};
+const REPAIR_COLOR_PALETTE = [
+  { bg:'#E8F0FB', fg:'#2B5FA5' }, // 藍
+  { bg:'#F1E7FB', fg:'#7A3AB2' }, // 紫
+  { bg:'#E1F5F0', fg:'#1F8A72' }, // 青
+  { bg:'#FDF0D5', fg:'#9C6B0A' }, // 金黃
+  { bg:'#FDE6F0', fg:'#B23A7A' }, // 粉
+  { bg:'#E6EAFB', fg:'#3A4FB2' }, // 靛
+  { bg:'#EAF5DE', fg:'#5C8A1F' }, // 萊姆綠
+  { bg:'#F5E6DC', fg:'#8A5A2F' }, // 棕
+  { bg:'#EDEDED', fg:'#666666' }  // 灰
+];
+
+// 每次畫維修紀錄頁面時，根據當下實際出現的狀態種類重新分配顏色。
+// 用排序過的順序來分配色盤，只要狀態種類沒變，同一個狀態每次算出來的顏色都會一樣。
+let REPAIR_STATUS_COLOR_MAP = {};
+function buildRepairStatusColorMap(statusSet){
+  const map = {};
+  let paletteIdx = 0;
+  [...statusSet].sort().forEach(s=>{
+    map[s] = REPAIR_KNOWN_COLORS[s] || REPAIR_COLOR_PALETTE[(paletteIdx++) % REPAIR_COLOR_PALETTE.length];
   });
+  return map;
+}
+function repairStatusColor(status){
+  return REPAIR_STATUS_COLOR_MAP[status] || DEFAULT_STATUS_COLOR;
+}
+function repairStatusBadgeHtml(status){
+  const c = repairStatusColor(status);
+  return `<span class="badge" style="background:${c.bg};color:${c.fg};">${fmt(status)}</span>`;
+}
+
+// 機台詳情視窗裡「狀態進度條」用的順序，代表實際的維修流程（跟總覽頁的排序目的不同）
+const STEPPER_ORDER = [
+  '台灣倉', '在途 - 台灣 TO NID', 'NID - 良品', 'NLA - 良品',
+  'STORE', 'STORE - 異常', 'NID - 待退回台灣', '在途-NID TO 台灣', '台灣維修中'
+];
+
+function statusColor(status){
+  return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
+}
+
+// 機台「類型」沒有固定的清單（可能隨時新增新類型），所以用一組固定色盤，
+// 依類型名稱算一個固定的雜湊值來選色，同一個類型每次畫面重繪都會拿到同一個顏色。
+const TYPE_PALETTE = [
+  { bg:'#E8F0FB', fg:'#2B5FA5' }, // 藍
+  { bg:'#F1E7FB', fg:'#7A3AB2' }, // 紫
+  { bg:'#FBEFDD', fg:'#B8752A' }, // 橙
+  { bg:'#E1F5F0', fg:'#1F8A72' }, // 青
+  { bg:'#FDE8F3', fg:'#A03D77' }, // 粉
+  { bg:'#EAF2D7', fg:'#5C7A29' }, // 橄欖綠
+  { bg:'#FBE0E0', fg:'#8A1F1F' }, // 深紅
+  { bg:'#EDEDED', fg:'#666666' }  // 灰
+];
+function typeColor(type){
+  if(!type) return DEFAULT_STATUS_COLOR;
+  let hash = 0;
+  for(let i=0;i<type.length;i++){ hash = (hash*31 + type.charCodeAt(i)) >>> 0; }
+  return TYPE_PALETTE[hash % TYPE_PALETTE.length];
+}
+function statusBadgeHtml(status){
+  const c = statusColor(status);
+  return `<span class="badge" style="background:${c.bg};color:${c.fg};">${fmt(status)}</span>`;
+}
+function orderedStatuses(statusMap){
+  const keys = Object.keys(statusMap);
+  const ordered = STATUS_ORDER.filter(s=>keys.includes(s));
+  const rest = keys.filter(k=>!STATUS_ORDER.includes(k)).sort();
+  return ordered.concat(rest);
+}
+
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function fmt(v){ return (v===null||v===undefined||v==='') ? '—' : v; }
+
+function fmtDate(v){
+  if(v===null||v===undefined||v==='') return '—';
+  // 有些儲存格裡會手動填超過一個日期（例如用換行分開的「2025/09/10」「2026/02/10」），
+  // 這裡把裡面所有看起來像日期的片段都抓出來，統一成 YYYY-MM-DD 格式，每個各自換行顯示。
+  const matches = String(v).match(/\d{4}[-\/]\d{2}[-\/]\d{2}/g);
+  if(!matches || !matches.length) return v;
+  return matches.map(d=>d.replace(/\//g,'-')).join('<br>');
+}
+
+// 給 <input type="date"> 用：只取儲存格裡的第一個日期（date 輸入框沒辦法放多個值）
+function firstDateOnly(v){
+  if(v===null||v===undefined||v==='') return '';
+  const m = String(v).match(/\d{4}[-\/]\d{2}[-\/]\d{2}/);
+  return m ? m[0].replace(/\//g,'-') : '';
+}
+
+// 有些 Google Sheet 標題儲存格裡藏了換行符號（例如「機器損壞時間\n（NID出貨）」），
+// 這個函式會先試試看完全對應的欄位名稱，找不到的話再忽略換行/空白去比對一次。
+function getField(obj, key){
+  if(obj[key] !== undefined) return obj[key];
+  const normalize = s => s.replace(/[\s\n\r]+/g,'').replace(/[（）]/g,m=>m==='（'?'(':')');
+  const targetNorm = normalize(key);
+  for(const k in obj){
+    if(normalize(k) === targetNorm) return obj[k];
+  }
+  return null;
+}
+
+// 搜尋框用的 debounce：使用者停止打字一小段時間後才重新畫表格，
+// 避免資料量大時每敲一個字就整張表重新 render 造成卡頓。
+function debounce(fn, wait=250){
+  let timer = null;
+  return function(...args){
+    clearTimeout(timer);
+    timer = setTimeout(()=>fn.apply(this,args), wait);
+  };
+}
+
+// 產生跟後端 nowStr() 格式一致的本機時間字串，用於新增/更新後的「樂觀更新」畫面顯示，
+// 之後背景資料重新整理時會被伺服器實際時間覆蓋過去。
+function clientNowStr(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/* ---------- API ---------- */
+
+async function fetchData(){
+  if(!API_URL){ renderNoApi(); return; }
+  $('#statusLine').textContent = '載入中…';
+  try{
+    const res = await fetch(API_URL + '?action=data');
+    const json = await res.json();
+    if(json.error) throw new Error(json.error);
+    DATA = json;
+    $('#statusLine').textContent = '已連線・共 ' + (DATA.machines||[]).length + ' 筆機台資料';
+    render();
+  }catch(err){
+    $('#statusLine').textContent = '連線失敗：' + err.message;
+    $('#main').innerHTML = '<div class="panel"><div class="msg error">讀取資料失敗，請確認 API 位址是否正確、Apps Script 是否已部署為「任何人」可存取。<br>錯誤訊息：'+err.message+'</div></div>';
+  }
+}
+
+async function callApi(payload){
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if(json.error) throw new Error(json.error);
+  return json.result;
+}
+
+/* ---------- settings helpers ---------- */
+
+function settingValues(key){
+  if(!DATA) return [];
+  return (DATA.settings||[]).filter(r=>r.key===key).map(r=>r.value);
+}
+
+// 有些機台會經過第 2、第 3…次維修循環，每次循環出貨到 STORE 時可能會換一個新店號
+// （Sheet 裡對應欄位例如「2-店號」「3-店號」）。這裡統一算出：
+// 1. 目前應該顯示的「有效店號」：以編號最大、且有填值的那個「N-店號」為準，
+//    找不到就退回最原始的 store_no。
+// 2. 這台機器目前跑到第幾次循環（沒有任何「N-」欄位有值就是第 1 次）。
+function getMachineCycleInfo(m){
+  const cycles = getMachineCycles(m); // { '2': [{field,val}, ...], '3': [...] }
+  let cycleCount = 1;
+  let effectiveStoreNo = m.store_no;
+
+  Object.keys(cycles).map(Number).sort((a,b)=>a-b).forEach(num=>{
+    const items = cycles[num];
+    const hasData = items.some(it=>it.val!==null && it.val!==undefined && it.val!=='');
+    if(hasData) cycleCount = Math.max(cycleCount, num);
+
+    const storeItem = items.find(it=>it.field==='店號');
+    if(storeItem && storeItem.val!==null && storeItem.val!==undefined && storeItem.val!==''){
+      effectiveStoreNo = storeItem.val;
+    }
+  });
+
+  return { cycleCount, effectiveStoreNo, isRepeat: cycleCount > 1 };
+}
+
+function cycleBadgeHtml(info){
+  if(!info.isRepeat) return '';
+  return ` <span class="badge" style="background:#F1E7FB;color:#7A3AB2;">第${info.cycleCount}次循環</span>`;
+}
+
+/* ---------- stats ---------- */
+
+function computeStats(){
+  const machines = DATA.machines || [];
+  const inventory = DATA.inventory || [];
+
+  const storeNos = new Set();
+  machines.forEach(m=>{
+    if(m.status === 'STORE' || m.status === 'STORE - 異常'){
+      const effective = getMachineCycleInfo(m).effectiveStoreNo;
+      const n = Number(effective);
+      if(effective !== null && effective !== undefined && effective !== '' && !isNaN(n)) storeNos.add(n);
+    }
+  });
+
+  const lowStock = inventory.filter(i=>{
+    const q = parseFloat(String(i.quantity).replace('+',''));
+    const min = Number(i.min_qty);
+    return !isNaN(q) && !isNaN(min) && q < min;
+  });
+
+  const repairing = machines.filter(m=>m.status === '台灣維修中').length;
+
+  const byType = {};
+  const byTypeStatus = {};
+  machines.forEach(m=>{
+    byType[m.type] = (byType[m.type]||0)+1;
+    if(!byTypeStatus[m.type]) byTypeStatus[m.type] = {};
+    byTypeStatus[m.type][m.status] = (byTypeStatus[m.type][m.status]||0)+1;
+  });
+
+  return { storeCount: storeNos.size, lowStock, repairing, byType, byTypeStatus, total: machines.length };
+}
+
+/* ---------- render ---------- */
+
+function renderNoApi(){
+  $('#main').innerHTML = '<div class="panel"><div class="empty">尚未設定 API 位址，請點右上角「設定 API 位址」開始連線。</div></div>';
+}
+
+function render(){
+  if(!DATA){ return; }
+  if(currentTab === 'dashboard') renderDashboard();
+  else if(currentTab === 'machines') renderMachines();
+  else if(currentTab === 'issuelog') renderIssueLog();
+  else if(currentTab === 'inventory') renderInventory();
+  else if(currentTab === 'repair') renderRepair();
+  else if(currentTab === 'lowstock') renderLowStock();
+}
+
+function renderDashboard(){
+  const s = computeStats();
+  const typeBlocks = Object.keys(s.byType).map(type=>{
+    const statusMap = s.byTypeStatus[type]||{};
+    const pills = orderedStatuses(statusMap).map(status=>{
+      const count = statusMap[status];
+      const c = statusColor(status);
+      return `
+        <span class="status-pill" style="background:${c.bg};color:${c.fg};">
+          <span class="dot" style="background:${c.fg};"></span>${status}<b>${count}</b>
+        </span>
+      `;
+    }).join('');
+    return `
+      <div class="type-block">
+        <div class="type-block-header"><span class="dot type-dot"></span>${type}<span class="type-total">共 ${s.byType[type]} 台</span></div>
+        <div class="status-pill-row">${pills}</div>
+      </div>
+    `;
+  }).join('');
+
+  $('#main').innerHTML = `
+    <div class="grid-stats">
+      <div class="stat-card"><div class="label">機台總數</div><div class="value">${s.total}</div></div>
+      <div class="stat-card"><div class="label">STORE 店家數（含 STORE 異常）</div><div class="value">${s.storeCount}</div><div class="note">不重複數字店號</div></div>
+      <div class="stat-card warn"><div class="label">低庫存零件</div><div class="value">${s.lowStock.length}</div><div class="note">數量 &lt; 最低庫存・詳見「低庫存零件」頁</div></div>
+      <div class="stat-card"><div class="label">台灣維修中</div><div class="value">${s.repairing}</div></div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0;">各狀態數量</h3>
+      ${typeBlocks}
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0;">機台進度追蹤</h3>
+      <div class="toolbar">
+        <input type="text" id="trackSearch" placeholder="搜尋機台序號 (sn)">
+        <span class="page-info" id="trackCount"></span>
+      </div>
+      <div class="table-wrap" style="max-height:70vh;"><table>
+        <thead><tr>
+          <th>機台 SN</th><th>類型</th><th>狀態</th><th>店號</th><th>問題描述</th><th>最後修改時間</th><th>最後更新者</th><th>維修紀錄</th><th>歷程</th>
+        </tr></thead>
+        <tbody id="trackRows"></tbody>
+      </table></div>
+    </div>
+  `;
+  $('#trackSearch').oninput = debounce(drawTrackRows);
+  drawTrackRows();
+}
+
+// 統計每台機器（機器編號）在維修紀錄裡出現幾次，機台進度追蹤表可以直接顯示，
+// 不用再切去維修紀錄頁手動搜尋比對。
+function computeRepairCountBySn(){
+  const counts = {};
+  (DATA.repair_log||[]).forEach(r=>{
+    const sn = getField(r,'機器編號');
+    if(sn) counts[sn] = (counts[sn]||0) + 1;
+  });
+  return counts;
+}
+
+// 從機台進度追蹤點「維修紀錄」badge，直接跳到維修紀錄頁並自動用這台機器的 SN 篩選
+let pendingRepairSearchSn = null;
+function goToRepairForSn(sn){
+  pendingRepairSearchSn = sn;
+  currentTab = 'repair';
+  setActiveTab('repair');
+  render();
+}
+
+function drawTrackRows(){
+  const q = ($('#trackSearch').value||'').toLowerCase();
+  let rows = DATA.machines || [];
+  if(q) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(q));
+  const repairCounts = computeRepairCountBySn();
+
+  $('#trackCount').textContent = `共 ${rows.length} 筆`;
+  $('#trackRows').innerHTML = rows.map(m=>{
+    const info = getMachineCycleInfo(m);
+    const repairCount = repairCounts[m.sn] || 0;
+    const repairCell = repairCount>0
+      ? `<button class="btn secondary" onclick="goToRepairForSn('${m.sn}')" style="border-color:#B8752A;color:#B8752A;">維修 ${repairCount} 筆</button>`
+      : '—';
+    return `
+    <tr>
+      <td>${fmt(m.sn)}${cycleBadgeHtml(info)}</td>
+      <td><span class="status-pill" style="background:#E8F0FB;color:#2B5FA5;"><span class="dot" style="background:#2B5FA5;"></span>${fmt(m.type)}</span></td>
+      <td>${statusBadgeHtml(m.status)}</td>
+      <td>${fmt(info.effectiveStoreNo)}</td>
+      <td>${fmt(m.issue)}</td>
+      <td>${fmt(m.updated_at)}</td>
+      <td>${fmt(m.updated_by)}</td>
+      <td>${repairCell}</td>
+      <td><button class="btn secondary" onclick="openDetailModal('${m.sn}')">詳情</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" class="empty">沒有符合條件的機台</td></tr>';
+}
+
+function openDetailModal(sn){
+  const m = (DATA.machines||[]).find(x=>x.sn===sn);
+  if(!m) return;
+  currentDetailSn = sn;
+  $('#detailModalTitle').textContent = sn;
+  $('#detailMsg').innerHTML = '';
+
+  // 狀態進度條（固定照實際維修流程順序，不是照資料出現順序）
+  const allStatuses = STEPPER_ORDER.slice();
+  if(m.status && !allStatuses.includes(m.status)) allStatuses.push(m.status);
+  $('#detailStepper').innerHTML = allStatuses.map((s,i)=>{
+    const active = s === m.status;
+    const c = statusColor(s);
+    return `
+      <div class="step ${active?'step-active':''}">
+        <div class="step-circle" style="${active?`background:${c.fg};color:#fff;`:''}">${i+1}</div>
+        <div class="step-label">${s}</div>
+      </div>
+      ${i<allStatuses.length-1 ? '<div class="step-line"></div>' : ''}
+    `;
+  }).join('');
+
+  // 基本資訊卡
+  const cycleInfo = getMachineCycleInfo(m);
+  $('#detailInfoGrid').innerHTML = `
+    <div class="info-card"><div class="info-label">類型</div><div class="info-value">${fmt(m.type)}</div></div>
+    <div class="info-card"><div class="info-label">目前狀態</div><div class="info-value">${statusBadgeHtml(m.status)}</div></div>
+    <div class="info-card"><div class="info-label">店號${cycleInfo.isRepeat?`（第${cycleInfo.cycleCount}次循環最新店號）`:''}</div><div class="info-value">${fmt(cycleInfo.effectiveStoreNo)}</div></div>
+    <div class="info-card"><div class="info-label">負責人</div><div class="info-value">${fmt(m.owner)}</div></div>
+    <div class="info-card"><div class="info-label">批次</div><div class="info-value">${fmt(m.batch)}</div></div>
+    <div class="info-card"><div class="info-label">最後修改時間</div><div class="info-value">${fmt(m.updated_at)}</div></div>
+  `;
+
+  // 更新狀態表單
+  const statusOptions = settingValues('status');
+  $('#d_status').innerHTML = statusOptions.map(s=>`<option value="${s}" ${s===m.status?'selected':''}>${s}</option>`).join('');
+  const operators = settingValues('operator');
+  $('#d_operator').innerHTML = '<option value="">請選擇</option>' + operators.map(o=>`<option value="${o}">${o}</option>`).join('');
+  $('#d_note').value = '';
+  $('#d_parts').value = '';
+
+  // 問題描述
+  $('#d_issueText').textContent = m.issue ? m.issue : '（無問題描述）';
+  $('#d_issueEditRow').style.display = 'none';
+  $('#d_issueInput').value = m.issue || '';
+
+  // 操作記錄
+  renderDetailLog(sn);
+
+  // 生命週期時間軸
+  renderDetailTimeline(sn);
+
+  $('#detailModal').classList.add('show');
+}
+
+// 掃描機台物件裡帶有「數字-欄位名稱」格式的欄位（例如 "2-NID入庫"），
+// 自動歸類成第幾次維修循環，不需要另外開分頁、不需要改變填寫習慣。
+function getMachineCycles(m){
+  const cycles = {};
+  for(const key in m){
+    const match = key.match(/^(\d+)-(.+)$/);
+    if(match){
+      const num = match[1], field = match[2].trim();
+      const val = m[key];
+      if(val === null || val === undefined || val === '') continue;
+      if(!cycles[num]) cycles[num] = [];
+      cycles[num].push({ field, val });
+    }
+  }
+  return cycles;
+}
+
+const CYCLE_1_FIELDS = ['機器損壞時間（NID出貨）','NID入庫（不良品）','台灣入庫（不良品）'];
+
+function renderDetailTimeline(sn){
+  const m = (DATA.machines||[]).find(x=>x.sn===sn);
+  if(!m){ $('#detailTimeline').innerHTML = '<div class="empty">找不到機台資料</div>'; return; }
+
+  const blocks = [];
+
+  // 第一次循環：既有的 3 個欄位（不用前綴）
+  const cycle1 = CYCLE_1_FIELDS
+    .map(f=>({ field:f, val:getField(m,f) }))
+    .filter(x=>x.val !== null && x.val !== undefined && x.val !== '');
+  if(cycle1.length) blocks.push({ label:'第 1 次循環', items:cycle1 });
+
+  // 第 2 次以後：自動偵測「數字-欄位名稱」格式的欄位
+  const cycles = getMachineCycles(m);
+  Object.keys(cycles).sort((a,b)=>Number(a)-Number(b)).forEach(num=>{
+    blocks.push({ label:`第 ${num} 次循環`, items:cycles[num] });
+  });
+
+  if(!blocks.length){
+    $('#detailTimeline').innerHTML = '<div class="empty">尚無生命週期紀錄</div>';
+    return;
+  }
+
+  $('#detailTimeline').innerHTML = blocks.map(block=>`
+    <div class="tl-block">
+      <div class="tl-block-title">${block.label}</div>
+      ${block.items.map(it=>`
+        <div class="tl-item">
+          <div class="tl-dot"></div>
+          <div class="tl-content">
+            <div class="tl-event">${fmt(it.field)}</div>
+            <div class="tl-meta">${/^\d{4}-\d{2}-\d{2}/.test(String(it.val)) ? fmtDate(it.val) : fmt(it.val)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function renderDetailLog(sn){
+  const logs = (DATA.machine_log||[]).filter(l=>l.sn===sn).slice().reverse();
+  $('#detailLogRows').innerHTML = logs.length ? logs.map(l=>`
+    <tr><td>${fmt(l.step)}</td><td>${fmt(l.note)}</td><td>${fmt(l.parts)}</td><td>${fmt(l.operator)}</td><td>${fmt(l.timestamp)}</td></tr>
+  `).join('') : '<tr><td colspan="5" class="empty">尚無記錄</td></tr>';
+}
+
+let machineFilterType = '';
+let machineFilterStatus = '';
+let machineFilterCycle = '';
+
+function renderMachines(){
+  machineFilterType = '';
+  machineFilterStatus = '';
+  machineFilterCycle = '';
+  const allMachines = DATA.machines || [];
+  const types = [...new Set(allMachines.map(m=>m.type))].filter(Boolean);
+  const statusSet = new Set(allMachines.map(m=>m.status).filter(Boolean));
+  const statuses = STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!STATUS_ORDER.includes(s)).sort());
+
+  // 每個狀態/類型底下各有幾筆機台，顯示在篩選標籤上
+  const statusCounts = {};
+  const typeCounts = {};
+  allMachines.forEach(m=>{
+    if(m.status) statusCounts[m.status] = (statusCounts[m.status]||0)+1;
+    if(m.type) typeCounts[m.type] = (typeCounts[m.type]||0)+1;
+  });
+
+  // 依實際資料算出目前最多跑到第幾次循環，下拉選單的選項會跟著資料自動增減
+  // （例如有機台已經到第 3 次循環，選單就會出現「第 3 次循環」）。
+  const maxCycle = allMachines.reduce((max,m)=>Math.max(max, getMachineCycleInfo(m).cycleCount), 1);
+  const cycleOptions = [];
+  for(let n=1; n<=maxCycle; n++){
+    cycleOptions.push(`<option value="${n}">${n===1 ? '第 1 次（尚未二次出貨）' : `第 ${n} 次循環`}</option>`);
+  }
+
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="searchSn" placeholder="搜尋機台序號 (sn)">
+        <input type="text" id="searchStoreNo" placeholder="輸入店號…">
+        <button class="btn secondary" id="clearStoreNo">清除</button>
+        <select id="cycleFilter">
+          <option value="">全部循環次數</option>
+          ${cycleOptions.join('')}
+        </select>
+        <span class="page-info" id="machineCount"></span>
+      </div>
+      <div class="filter-pill-row" id="statusFilterRow">
+        <button class="filter-pill active" data-status="">全部 (${allMachines.length})</button>
+        ${statuses.map(s=>{
+          const c = statusColor(s);
+          return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s} (${statusCounts[s]||0})</button>`;
+        }).join('')}
+      </div>
+      <div class="filter-pill-row" id="typeFilterRow">
+        <button class="filter-pill type-pill active" data-type="">全部類型 (${allMachines.length})</button>
+        ${types.map(t=>{
+          const c = typeColor(t);
+          return `<button class="filter-pill type-pill" data-type="${t}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${t} (${typeCounts[t]||0})</button>`;
+        }).join('')}
+      </div>
+      <div style="margin:14px 0;">
+        <button class="btn" id="addMachineBtn">＋ 新增機台</button>
+      </div>
+      <div class="table-wrap" style="max-height:65vh;"><table>
+        <thead><tr>
+          <th>機器號</th><th>類型</th><th>狀態</th><th>店號</th><th>問題描述</th>
+          <th>機器損壞時間（NID出貨）</th><th>NID入庫（不良品）</th><th>台灣入庫（不良品）</th>
+        </tr></thead>
+        <tbody id="machineRows"></tbody>
+      </table></div>
+    </div>
+  `;
+  $('#addMachineBtn').onclick = openMachineModal;
+  $('#searchSn').oninput = debounce(drawMachineRows);
+  $('#searchStoreNo').oninput = debounce(drawMachineRows);
+  $('#clearStoreNo').onclick = ()=>{ $('#searchStoreNo').value=''; drawMachineRows(); };
+  $('#cycleFilter').onchange = ()=>{ machineFilterCycle = $('#cycleFilter').value; drawMachineRows(); };
+
+  $$('#statusFilterRow .filter-pill').forEach(btn=>{
+    btn.onclick = ()=>{
+      machineFilterStatus = btn.dataset.status;
+      $$('#statusFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
+      drawMachineRows();
+    };
+  });
+  $$('#typeFilterRow .filter-pill').forEach(btn=>{
+    btn.onclick = ()=>{
+      machineFilterType = btn.dataset.type;
+      $$('#typeFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
+      drawMachineRows();
+    };
+  });
+
+  drawMachineRows();
+}
+
+function drawMachineRows(){
+  const search = ($('#searchSn').value||'').toLowerCase();
+  const storeNoSearch = ($('#searchStoreNo').value||'').toLowerCase();
+  let rows = DATA.machines || [];
+  if(search) rows = rows.filter(m=>(m.sn||'').toLowerCase().includes(search));
+  if(storeNoSearch) rows = rows.filter(m=>{
+    // 同時比對原始 store_no 跟二次出貨後的新店號，不然搜尋新店號會找不到機台
+    const info = getMachineCycleInfo(m);
+    return String(m.store_no||'').toLowerCase().includes(storeNoSearch)
+      || String(info.effectiveStoreNo||'').toLowerCase().includes(storeNoSearch);
+  });
+  if(machineFilterType) rows = rows.filter(m=>m.type===machineFilterType);
+  if(machineFilterStatus) rows = rows.filter(m=>m.status===machineFilterStatus);
+  if(machineFilterCycle) rows = rows.filter(m=>getMachineCycleInfo(m).cycleCount === Number(machineFilterCycle));
+
+  $('#machineCount').textContent = `共 ${rows.length} 筆`;
+
+  $('#machineRows').innerHTML = rows.map(m=>{
+    const info = getMachineCycleInfo(m);
+    return `
+    <tr>
+      <td>${fmt(m.sn)}${cycleBadgeHtml(info)}</td><td>${fmt(m.type)}</td><td>${statusBadgeHtml(m.status)}</td>
+      <td>${fmt(info.effectiveStoreNo)}</td><td>${fmt(m.issue)}</td>
+      <td>${fmtDate(getField(m,'機器損壞時間（NID出貨）'))}</td>
+      <td>${fmtDate(getField(m,'NID入庫（不良品）'))}</td>
+      <td>${fmtDate(getField(m,'台灣入庫（不良品）'))}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="empty">沒有符合條件的機台</td></tr>';
+}
+
+// ---------- 店內機器問題追蹤（issue_log，取代 FCM1 那份 Google Sheet） ----------
+// 第一版：列表只顯示幾個關鍵欄位，其他 23 欄全部內容透過「詳情」彈出視窗看（兩欄並排，不用左右滑動）。
+// 新增/編輯功能之後再加。
+const ISSUE_CAT1 = [
+      '01_Power Box (FCM-A02) 電源箱',
+      '02_Machine Head (Main Body)(FCM-A01) 機頭',
+      '03_Trash Bin(FCM-A10) 垃圾筒',
+      '04_Auxiliary Devices (Compressor, Air Tank, Vacuum, etc.) 空壓機、儲氣桶、吸塵器',
+      '05_Human-machine Interface (HMI) (FCM-A03) 人機',
+      '06_Label Printer(FCM-A12) 標籤機',
+      '07_Tray(FCM-A11)',
+      '08_Air Control Panel 空壓控制面盤',
+      '09_其他',
+      '10_待確認',
+      '11_Wi-Fi Router'
+    ];
+
+const ISSUE_CAT2 = [
+      '01-04_Power Cord 電源線',
+      '01-05_Power Box I/O Panel 電源盒 I/O 面板',
+      '01-08_Door Lock 門鎖',
+      '01-10_電箱內',
+      '01-11_無電源',
+      '02-01_Hinge (FCM-P44) 鉸鏈',
+      '02-02_Lift Cover 上掀式護蓋',
+      '02-08_ Dial 旋鈕',
+      '02-09_Emergency Stop 緊急停止鈕',
+      '02-11_Saw Nut 鋸片螺帽',
+      '02-12_Saw Blade (FCM-P01) 鋸片',
+      '02-16_Clamp Cylinder 壓料氣缸',
+      '02-17_Clamp Movable Jaw 活動夾爪',
+      '02-18_Sliding Door 滑動門',
+      '02-19_Insert Door Sensor (FCM-P20)  滑門感測器',
+      '02-21_End Stop Module  擋尺組',
+      '02-23_Detector Sensor (FCM-P18) 偵測感測器',
+      '02-25_Feeding Pulley (Follower) 送料輪（從動輪）',
+      '02-28_Intermediate Air Supply Connectors (for the Cover) 外殼蓋相關的中間供氣接頭',
+      '02-29_機頭內漏氣',
+      '03-02_Safety Sensor(FCM-P21) 安全感應開關',
+      '04-01_Tank (FCM-P41) 儲氣桶',
+      '04-02_Vacuum (FCM-P40) 吸塵器',
+      '04-03_Air Compressor (FCM-A06) 空壓機',
+      '05-01_HMI Screen(FCM-P04) 人機介面螢幕',
+      '05-03_Barcode Scanner(FCM-P48) 條碼掃描器',
+      '05-08_USB Hub Plug USB 集線器插頭',
+      '05-11_HMI USB Hub(FCM-P49) HMI 專用 USB 集線器',
+      '05-12_HMI CON2/COM3',
+      '06-02_Label Outlet 標籤出口',
+      '06-04_Power Switch電源開關',
+      '06-06_人機顯示未偵測到條碼機',
+      '06-08_標籤機列印異常',
+      '07-01_Left Tray  左托盤',
+      '07-03_Right Skirt Plate 右裙板',
+      '07-04_Dual-button Start(FCM-P14) 雙鍵裁切按鈕',
+      '07-08_Dual-button Start Wiring 雙鍵裁切按鈕配線',
+      '07-09_出貨零件受損',
+      '08-01_Solenoid Valve Group 電磁閥組合',
+      '08-04_Main Pressure Regulator  主壓力調節器',
+      '08-12_空壓控制面盤漏氣',
+      '09-01_出貨缺件',
+      '09-02_貨架尺寸不對',
+      '09-03_裁切異常',
+      '09-04_商店內電源問題',
+      '09-05_MET安裝不良',
+      '09-06_供應商來料不良',
+      '09-07_更換舊式掃瞄器',
+      '09-08_漏電',
+      '11-01_網路問題'
+    ];
+
+const ISSUE_CAT3 = [
+      '01-05-04_PLC-ENT  PLC 控制主機',
+      '01-05-05_HMI-110V 人機電源',
+      '01-05-08_Vacuum 吸塵器',
+      '01-05-09_Air-Compressor 空壓機',
+      '01-05-10_Servo-PWR  伺服電源',
+      '01-08-01_鑰匙',
+      '01-10-01_漏電斷路器跳脫',
+      '01-10-02_伺服驅動器',
+      '01-10-03_步進驅動器',
+      '01-10-04_PLC',
+      '01-10-05_安全繼電器',
+      '01-10-06_保險絲',
+      '01-10-08_變壓器',
+      '01-10-10_電磁接觸器作動不良',
+      '01-10-11_插座',
+      '02-01-01_Hinge 分離',
+      '02-02-01_LED Tube LED 燈',
+      '02-02-03_Lift Cover Support 護蓋支撐架',
+      '02-02-04_掀蓋開合異常',
+      '02-02-09_Lock Cylinder  鎖栓',
+      '02-08-01_擋尺移動異常',
+      '02-09-01_接頭鬆脫',
+      '02-09-02_遺失',
+      '02-09-03_損壞',
+      '02-11-01_遺失',
+      '02-12-01_鋸齒受損',
+      '02-12-02_產品裁切不良',
+      '02-12-03_無法移動',
+      '02-12-06_進給馬達發出異音',
+      '02-16-01_夾持氣缸連接板鬆脫',
+      '02-17-01_夾持作動行程異常',
+      '02-18-01 變形',
+      '02-18-02_缺件',
+      '02-21-01_擋料近接開關故障',
+      '02-23-01_擋尺偵測異常',
+      '02-25-01_繩索脫落',
+      '02-28-01_Lock Cylin Hose 鎖心氣管',
+      '03-02-01_M8連接器不良',
+      '03-02-02_M8連接器接頭沒鎖到位',
+      '04-01-01_Header 壓力錶',
+      '04-01-02_Connector(with tube)(to Air Compress)  接頭（含軟管，接空壓機）',
+      '04-01-04_Connector(to Machine head) 接頭（至機台頭部）',
+      '04-02-01_POWER Switch 電源開關',
+      '04-02-02_Vacuum Hose 吸塵軟管',
+      '04-02-04_Cover 蓋子',
+      '04-02-05_吸力不足',
+      '04-02-06_吸塵器無法啟動',
+      '04-02-07_濾網破洞',
+      '04-02-08_其它',
+      '04-03-01_Connector (to Tank) 接頭（至儲氣桶）',
+      '04-03-02_Header (Output) 壓力錶—輸出端',
+      '04-03-05_POWER Switch 電源開關',
+      '04-03-08_空壓機逆止閥異常',
+      '04-03-09_Release tube (to solenoid valve) 排氣管（至電磁閥）',
+      '04-03-12_空壓機無法啟動',
+      '04-03-13_噪音',
+      '04-03-15_空壓機閥門未開',
+      '05-01-02_檔尺歸零無法校正',
+      '05-01-03_人機更新失敗',
+      '05-01-05_流程卡住',
+      '05-01-06_鋸切中',
+      '05-01-07_Passcode Screen無法登入',
+      '05-01-08_人機異常錯誤碼',
+      '05-01-11_UI異常碼：馬達故障(AL003)',
+      '05-01-12_UI異常碼：垃圾桶遺失(AL004)',
+      '05-01-13_MET 安裝損壞',
+      '05-01-15_裁切資料LOG檔下載失敗',
+      '05-03-01_掃描無反應',
+      '05-03-02_線材斷掉',
+      '05-12-01_線材斷掉',
+      '06-02-01_紙張沒有跑出來',
+      '06-02-02_列印內容空白',
+      '06-04-01_過熱冒煙',
+      '06-04-02_無電源',
+      '07-01-01_出貨零件受損',
+      '07-03-01_螺絲尺寸不對',
+      '07-04-02_指示燈外殼掉落',
+      '07-04-03_異常錯誤碼_AL-024',
+      '07-08-01_線材斷掉',
+      '07-08-02_線材鬆掉',
+      '07-08-03_接線錯誤',
+      '08-01-03_Dial Lock',
+      '08-01-04_Cover Lock漏氣',
+      '08-04-01_漏氣',
+      '09-03-01_裁切尺寸不準',
+      '09-03-02_SKUs配方表問題',
+      '09-03-03_機台起火',
+      '09-04-02_斷路器一直跳脫',
+      '09-05-01_插頭插錯',
+      '09-06-01_延長線不良',
+      '09-06-02_網路線不良',
+      '11-01-01_Internet無法連線'
+    ];
+
+const ISSUE_CAT4 = [
+      '01-05-04-01_損壞',
+      '01-05-04-02_沒連接',
+      '01-05-08-01_無電源',
+      '01-05-10-01_伺服動力線端子鬆脫',
+      '01-10-01-01_一直跳脫',
+      '01-10-02-01_面板無顯示',
+      '01-10-02-02_鋸切馬達錯誤碼AL 001',
+      '01-10-02-04_鋸切馬達錯誤碼AL 011',
+      '01-10-02-05_鋸切馬達錯誤碼AL 012',
+      '01-10-02-06_鋸切馬達錯誤碼AL 013',
+      '01-10-02-07_鋸切馬達錯誤碼AL 035',
+      '01-10-02-08_鋸切馬達錯誤碼AL 009',
+      '01-10-02-09_鋸切馬達錯誤碼AL 033',
+      '01-10-03-01_步進馬達驅動板解析度設定錯誤',
+      '01-10-04-04_錯誤：ERROR燈亮起',
+      '01-10-04-05_更新失敗',
+      '01-10-05-02_狀態燈未全亮',
+      '01-10-06-01_保險絲熔斷',
+      '01-10-06-02_保險絲脫落',
+      '01-10-08-01_脫落',
+      '01-10-11-03_110V插座無電源輸出',
+      '02-02-01-01_夾子損壞',
+      '02-02-01-02_燈具損壞',
+      '02-08-01-01_擋尺偵測氣缸脫落',
+      '02-08-02-01_氣缸氣管漏氣',
+      '02-28-01-01_鎖心氣管漏氣',
+      '04-01-02-01_ 儲氣桶漏氣',
+      '04-01-02-02_軟管接頭遺失',
+      '04-01-04-01接頭遺失',
+      '04-02-02-01_受損',
+      '04-02-02-02_缺件',
+      '04-02-08-01_靜電問題',
+      '04-03-09-01_空壓機氣管破洞',
+      '05-01-03-01_插入USB沒反應',
+      '05-01-03-02_顯示錯誤碼',
+      '05-01-03-03_資料下載時間過長',
+      '05-01-03-04_插入SD卡沒反應',
+      '05-01-05-01_按下Dual-Button無反應',
+      '05-01-05-04_程式未更新到最新版',
+      '05-01-06-01_鋸片沒有移動',
+      '05-01-06-02_產品沒有裁切完成',
+      '05-01-06-03_鋸片沒有轉動',
+      '05-01-06-04_鋸片CLICK 聲',
+      '05-01-06-05_鋸切不順',
+      '05-01-08-01_Unexpected error occurred',
+      '05-01-08-02_Unexpected error occurred (9)',
+      '05-01-08-03_Read Error 3',
+      '05-01-08-06_HMI Disk is almost full.',
+      '05-01-08-07_SD Disk is almost full',
+      '05-01-08-09_Error Sig 11 Code 1 Atl libQt5Gui',
+      '05-01-08-10_COMMUNICATION ERROR 3',
+      '05-01-11-01_鋸切馬達錯誤碼0',
+      '05-01-11-03_鋸切馬達錯誤碼AL 006',
+      '05-01-11-04_鋸切馬達錯誤碼AL 011',
+      '05-01-11-09_鋸切馬達錯誤碼AL 09F',
+      '05-01-12-01_無法排除',
+      '05-01-15-01_流程卡住',
+      '08-01-03-02_線接不正確'
+    ];
+
+
+const ISSUE_LOG_ALL_FIELDS = [
+  'TRACK NO.','店號','異常發生日期','分類1','分類2','分類3','分類4',
+  '最後一階（資料自動帶入）','問題敘述','排除歷程','備註',
+  'LINE上聊天室名稱','LINE聊天室對話內容','機器目前狀態追蹤',
+  'NID備品寄給維修人/店的時間','更換零件名稱','PDCA',
+  '機器編號','機頭編號A01','電箱編號A02','人機組編號A03','人機介面編號P04','地區'
+];
+const ISSUE_LOG_DATE_COLS = ['異常發生日期'];
+// 列表要顯示的關鍵欄位（其他欄位點「詳情」才看得到）
+const ISSUE_LOG_LIST_COLS = [
+  'TRACK NO.','店號','異常發生日期','最後一階（資料自動帶入）','機器目前狀態追蹤','PDCA',
+  'LINE上聊天室名稱','機器編號','更換零件名稱','NID備品寄給維修人/店的時間','地區'
+];
+
+let issueLogRowsCache = [];
+
+// 依 TRACK NO. 裡的數字由大到小排序，新增的資料（數字最大）自然會排在最上面，
+// 不用管它在 Google Sheet 裡實際是哪一列。
+function sortIssueRowsByTrackNo(rows){
+  return [...rows].sort((a,b)=>{
+    const na = Number(String(a['TRACK NO.']||'').match(/\d+/)?.[0] || 0);
+    const nb = Number(String(b['TRACK NO.']||'').match(/\d+/)?.[0] || 0);
+    return nb - na;
+  });
+}
+
+function renderIssueLog(){
+  const rows = sortIssueRowsByTrackNo(DATA.issue_log || []);
+  issueLogRowsCache = rows;
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="issueSearch" placeholder="搜尋店號或 TRACK NO.">
+        <span class="page-info" id="issueCount"></span>
+      </div>
+      <div style="margin:14px 0;">
+        <button class="btn" id="addIssueBtn">＋ 新增問題</button>
+      </div>
+      <div class="table-wrap" style="max-height:70vh;"><table>
+        <thead><tr>${ISSUE_LOG_LIST_COLS.map(c=>`<th>${c}</th>`).join('')}<th>詳情</th></tr></thead>
+        <tbody id="issueRows"></tbody>
+      </table></div>
+    </div>
+  `;
+  $('#issueSearch').oninput = debounce(()=>drawIssueRows(rows));
+  $('#addIssueBtn').onclick = openIssueAddModal;
+  drawIssueRows(rows);
+}
+
+const ISSUE_LOG_WRAP_COLS = ['最後一階（資料自動帶入）','機器目前狀態追蹤','LINE上聊天室名稱','更換零件名稱','NID備品寄給維修人/店的時間','機器編號'];
+
+function drawIssueRows(rows){
+  const q = ($('#issueSearch').value||'').toLowerCase();
+  let filtered = rows;
+  if(q) filtered = rows.filter(r=>
+    String(r['店號']||'').toLowerCase().includes(q) ||
+    String(r['TRACK NO.']||'').toLowerCase().includes(q)
+  );
+  $('#issueCount').textContent = `共 ${filtered.length} 筆`;
+  $('#issueRows').innerHTML = filtered.length ? filtered.map(r=>`<tr>${ISSUE_LOG_LIST_COLS.map(c=>{
+    const v = r[c];
+    const display = ISSUE_LOG_DATE_COLS.includes(c) ? fmtDate(v) : fmt(v);
+    const cls = ISSUE_LOG_WRAP_COLS.includes(c) ? ' class="wrap-cell"' : '';
+    return `<td${cls}>${display}</td>`;
+  }).join('')}<td><button class="btn secondary" onclick="openIssueDetailModal('${r._row}')">詳情</button></td></tr>`).join('') : `<tr><td colspan="${ISSUE_LOG_LIST_COLS.length+1}" class="empty">目前沒有問題追蹤紀錄</td></tr>`;
+}
+
+// 這幾個欄位內容通常比較長，改成佔滿整行寬度（不跟旁邊欄位擠半版），
+// 顯示會變寬、變矮；其他短欄位會自動往下遞補、重新兩兩配對，不用手動排順序。
+const ISSUE_LOG_FULLWIDTH_FIELDS = ['問題敘述','排除歷程','備註','LINE聊天室對話內容'];
+
+// 每個欄位對應的輸入元件類型。TRACK NO. 跟「最後一階」是系統自動處理的欄位，
+// 新增時不會出現在表單裡；編輯時會顯示但鎖住（disabled），不能手動改。
+const ISSUE_FIELD_CONFIG = [
+  { key:'TRACK NO.', type:'text' },
+  { key:'店號', type:'text' },
+  { key:'異常發生日期', type:'date' },
+  { key:'分類1', type:'select', options:ISSUE_CAT1 },
+  { key:'分類2', type:'select', options:ISSUE_CAT2 },
+  { key:'分類3', type:'select', options:ISSUE_CAT3 },
+  { key:'分類4', type:'select', options:ISSUE_CAT4 },
+  { key:'最後一階（資料自動帶入）', type:'readonly' },
+  { key:'備註', type:'text' },
+  { key:'問題敘述', type:'textarea', full:true, rows:8 },
+  { key:'排除歷程', type:'textarea', full:true, rows:8 },
+  { key:'LINE聊天室對話內容', type:'textarea', full:true, rows:10 },
+  { key:'機器目前狀態追蹤', type:'text' },
+  { key:'LINE上聊天室名稱', type:'text' },
+  { key:'PDCA', type:'select', options:['P','D','C','A'] },
+  { key:'NID備品寄給維修人/店的時間', type:'textarea', rows:9 },
+  { key:'更換零件名稱', type:'textarea', rows:9 },
+  { type:'group', fields:[
+    { key:'機器編號', type:'textarea', rows:2 },
+    { key:'機頭編號A01', type:'textarea', rows:2 },
+    { key:'電箱編號A02', type:'textarea', rows:2 }
+  ]},
+  { key:'人機組編號A03', type:'textarea', rows:2 },
+  { key:'人機介面編號P04', type:'textarea', rows:2 },
+  { key:'地區', type:'text' }
+];
+
+function escapeAttr(s){ return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function issueFieldInputHtml(cfg, record){
+  record = record || {};
+  const spanStyle = cfg.full ? ' style="grid-column:1 / -1;"' : '';
+  if(cfg.type === 'group'){
+    // 把幾個小欄位包在同一個格子裡上下疊放，讓它們加起來的高度跟旁邊的大文字框對齊
+    const inner = cfg.fields.map(sub => issueFieldInputHtml(sub, record)).join('');
+    return `<div${spanStyle}>${inner}</div>`;
+  }
+  const value = record[cfg.key];
+  const safeVal = (value===null||value===undefined) ? '' : String(value);
+  if(cfg.type === 'readonly'){
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="text" data-field="${cfg.key}" value="${escapeAttr(safeVal)}" disabled></div>`;
+  }
+  if(cfg.type === 'select'){
+    const opts = ['<option value="">（未選擇）</option>'].concat(
+      cfg.options.map(o=>`<option value="${escapeAttr(o)}" ${o===safeVal?'selected':''}>${o}</option>`)
+    );
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><select data-field="${cfg.key}">${opts.join('')}</select></div>`;
+  }
+  if(cfg.type === 'date'){
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="date" data-field="${cfg.key}" value="${firstDateOnly(value)}"></div>`;
+  }
+  if(cfg.type === 'textarea'){
+    return `<div class="field"${spanStyle}><label>${cfg.key}</label><textarea data-field="${cfg.key}" rows="${cfg.rows||4}">${safeVal.replace(/</g,'&lt;')}</textarea></div>`;
+  }
+  return `<div class="field"${spanStyle}><label>${cfg.key}</label><input type="text" data-field="${cfg.key}" value="${escapeAttr(safeVal)}"></div>`;
+}
+
+let currentIssueMode = 'add'; // 'add' | 'edit'
+let currentIssueRow = null;
+
+function openIssueAddModal(){
+  currentIssueMode = 'add';
+  currentIssueRow = null;
+  $('#issueFormTitle').textContent = '新增問題';
+  $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG
+    .filter(cfg => cfg.key!=='TRACK NO.' && cfg.key!=='最後一階（資料自動帶入）') // 這兩個新增時不用填，系統自動處理
+    .map(cfg => issueFieldInputHtml(cfg, {})).join('');
+  $('#issueFormMsg').innerHTML = '';
+  $('#issueFormDelete').style.display = 'none';
+  $('#issueFormModal').classList.add('show');
+}
+
+function openIssueDetailModal(rowIndex){
+  const r = issueLogRowsCache.find(x=>String(x._row)===String(rowIndex));
+  if(!r) return;
+  currentIssueMode = 'edit';
+  currentIssueRow = rowIndex;
+  $('#issueFormTitle').textContent = '編輯問題追蹤';
+  $('#issueFormGrid').innerHTML = ISSUE_FIELD_CONFIG.map(cfg => issueFieldInputHtml(cfg, r)).join('');
+  $('#issueFormMsg').innerHTML = '';
+  $('#issueFormDelete').style.display = '';
+  bindIssueCategoryLiveUpdate();
+  $('#issueFormModal').classList.add('show');
+}
+
+// 分類1~4 只要一改，「最後一階」的顯示就跟著即時更新（畫面預覽用），
+// 實際存進 Google Sheet 的值仍然是按「儲存」時重新算一次，兩邊邏輯一致。
+function bindIssueCategoryLiveUpdate(){
+  ['分類1','分類2','分類3','分類4'].forEach(key=>{
+    const el = $(`#issueFormGrid [data-field="${CSS.escape(key)}"]`);
+    if(el) el.addEventListener('change', updateIssueLastLevelPreview);
+  });
+  updateIssueLastLevelPreview();
+}
+function updateIssueLastLevelPreview(){
+  const lastLevelEl = $(`#issueFormGrid [data-field="${CSS.escape('最後一階（資料自動帶入）')}"]`);
+  if(!lastLevelEl) return; // 新增問題的表單沒有這個欄位，不用處理
+  const data = {};
+  ['分類1','分類2','分類3','分類4'].forEach(key=>{
+    const el = $(`#issueFormGrid [data-field="${CSS.escape(key)}"]`);
+    data[key] = el ? el.value : '';
+  });
+  lastLevelEl.value = calcIssueLastLevel(data);
+}
+
+function closeIssueFormModal(){
+  $('#issueFormModal').classList.remove('show');
+}
+$('#issueFormModalClose').onclick = closeIssueFormModal;
+$('#issueFormCancel').onclick = closeIssueFormModal;
+$('#issueFormModal').addEventListener('click', (e)=>{ if(e.target.id==='issueFormModal') closeIssueFormModal(); });
+
+// 依分類4→3→2→1 的順序，拿有填的那一層當「最後一階」，跟 Google Sheet 原本的公式邏輯一樣
+function calcIssueLastLevel(data){
+  return data['分類4'] || data['分類3'] || data['分類2'] || data['分類1'] || '';
+}
+
+$('#issueFormSave').onclick = async ()=>{
+  const data = {};
+  $$('#issueFormGrid [data-field]').forEach(el=>{
+    if(el.disabled) return; // TRACK NO./最後一階 是唯讀，不送出去覆蓋
+    data[el.dataset.field] = el.value || null;
+  });
+  data['最後一階（資料自動帶入）'] = calcIssueLastLevel(data) || null;
+
+  $('#issueFormMsg').innerHTML = '';
+  // 存檔過程中鎖住儲存/刪除按鈕，避免連點兩下送出兩次新增請求
+  $('#issueFormSave').disabled = true;
+  $('#issueFormDelete').disabled = true;
+  $('#issueFormSave').textContent = '儲存中…';
+  try{
+    if(currentIssueMode === 'add'){
+      await callApi({ action:'addIssueLog', data });
+      // 新增這筆的實際列號要重新整包抓一次才會準確（自動編號、_row 都是後端算的），
+      // 新增動作不像編輯那麼頻繁，這裡用完整重抓確保資料正確。
+      await fetchData();
+    } else {
+      await callApi({ action:'updateIssueLog', row: currentIssueRow, data });
+      const r = issueLogRowsCache.find(x=>String(x._row)===String(currentIssueRow));
+      if(r) Object.assign(r, data);
+    }
+    closeIssueFormModal();
+    if(currentTab==='issuelog') render();
+  }catch(err){
+    $('#issueFormMsg').innerHTML = '<div class="msg error">儲存失敗：'+err.message+'</div>';
+  }finally{
+    $('#issueFormSave').disabled = false;
+    $('#issueFormDelete').disabled = false;
+    $('#issueFormSave').textContent = '儲存';
+  }
+};
+
+$('#issueFormDelete').onclick = async ()=>{
+  if(currentIssueMode !== 'edit' || currentIssueRow===null) return;
+  const r = issueLogRowsCache.find(x=>String(x._row)===String(currentIssueRow));
+  const label = r ? (r['TRACK NO.']||'這筆') : '這筆';
+  if(!confirm(`確定要刪除 ${label} 這筆問題追蹤紀錄嗎？刪除後無法復原。`)) return;
+
+  $('#issueFormMsg').innerHTML = '';
+  $('#issueFormSave').disabled = true;
+  $('#issueFormDelete').disabled = true;
+  $('#issueFormDelete').textContent = '刪除中…';
+  try{
+    await callApi({ action:'deleteIssueLog', row: currentIssueRow });
+    // 刪除會讓 Google Sheet 底下的列往上遞補，其他列的 _row 都會跟著變，
+    // 所以刪除後一定整包重新抓一次資料，不做局部更新。
+    await fetchData();
+    closeIssueFormModal();
+    if(currentTab==='issuelog') render();
+  }catch(err){
+    $('#issueFormMsg').innerHTML = '<div class="msg error">刪除失敗：'+err.message+'</div>';
+  }finally{
+    $('#issueFormSave').disabled = false;
+    $('#issueFormDelete').disabled = false;
+    $('#issueFormDelete').textContent = '刪除這筆';
+  }
+};
+
+function renderInventory(){
+  const rows = DATA.inventory || [];
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="table-wrap"><table>
+        <thead><tr><th>模組</th><th>分類</th><th>品名</th><th>規格</th><th>庫存</th><th>最低庫存</th><th>備註</th></tr></thead>
+        <tbody>${rows.map(i=>{
+          const q = parseFloat(String(i.quantity).replace('+',''));
+          const min = Number(i.min_qty);
+          const low = !isNaN(q) && !isNaN(min) && q < min;
+          return `<tr>
+            <td>${fmt(i.module)}</td><td>${fmt(i.category)}</td><td>${fmt(i.name)}</td><td>${fmt(i.spec)}</td>
+            <td>${low?`<span class="badge low">${fmt(i.quantity)}</span>`:fmt(i.quantity)}</td>
+            <td>${fmt(i.min_qty)}</td><td>${fmt(i.note)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>
+  `;
+}
+
+let repairFilterStatus = '';
+let repairSearchSn = '';
+let repairVisitCounts = new Map(); // r._row -> 這台機器第幾次出現在維修紀錄裡
+
+// 依 NO 由小到大排序，算出同一個「機器編號」第幾次出現在維修紀錄裡（第 1 次、第 2 次…）。
+// 用來標示「這台機器又回廠維修了」。
+function computeRepairVisitCounts(rows){
+  const counts = {};
+  const result = new Map();
+  const sorted = [...rows].sort((a,b)=> (Number(getField(a,'NO'))||0) - (Number(getField(b,'NO'))||0));
+  sorted.forEach(r=>{
+    const sn = getField(r,'機器編號');
+    if(!sn) return;
+    counts[sn] = (counts[sn]||0) + 1;
+    result.set(r._row, counts[sn]);
+  });
+  return result;
+}
+
+// 只要「檢修問題／更換零件／檢修完成日期／檢修人員」這 4 個欄位任一個有值，就算已經填寫過維修紀錄歷程
+function hasRepairDetailFilled(r){
+  return !!(getField(r,'檢修問題') || getField(r,'更換零件') || getField(r,'檢修完成日期') || getField(r,'檢修人員'));
+}
+
+function renderRepair(){
+  repairFilterStatus = '';
+  const initialSearch = pendingRepairSearchSn || '';
+  pendingRepairSearchSn = null;
+  repairSearchSn = initialSearch.toLowerCase();
+  const rows = DATA.repair_log || [];
+  // key 是 Google Sheet 裡實際的欄位名稱（讀取資料用），label 是畫面上要顯示的文字。
+  // getField() 內建會忽略欄位名稱裡的換行/空白差異，所以「機器退至NID\n日期\n（MO系統）」
+  // 這種因為儲存格換行而看起來分行的標題也能對得上。
+  const cols = [
+    { key:'NO', label:'NO' },
+    { key:'機器狀態', label:'機器狀態' },
+    { key:'機器編號', label:'機器編號' },
+    { key:'店號', label:'店號' },
+    { key:'問題回報', label:'問題回報' },
+    { key:'案件編號', label:'案件編號' },
+    { key:'其他資訊', label:'其他資訊' },
+    { key:'機器退至NID日期（MO系統）', label:'機器退至NID日期' },
+    { key:'NID回台灣日期', label:'NID回台灣日期' },
+    { key:'入芳苑日期', label:'入芳苑日期' },
+    { key:'維修出庫日期', label:'維修出庫日期' }
+  ];
+  const dateKeys = ['機器退至NID日期（MO系統）','NID回台灣日期','入芳苑日期','維修出庫日期'];
+
+  const statusSet = new Set(rows.map(r=>getField(r,'機器狀態')).filter(Boolean));
+  REPAIR_STATUS_COLOR_MAP = buildRepairStatusColorMap(statusSet);
+  const statuses = REPAIR_STATUS_ORDER.filter(s=>statusSet.has(s)).concat([...statusSet].filter(s=>!REPAIR_STATUS_ORDER.includes(s)).sort());
+  const statusCounts = {};
+  rows.forEach(r=>{
+    const s = getField(r,'機器狀態');
+    if(s) statusCounts[s] = (statusCounts[s]||0)+1;
+  });
+
+  // 同一台機器（機器編號）如果在維修紀錄裡出現不只一次，代表它又回廠維修過。
+  // 依 NO 由小到大排序，算出每一列是這台機器第幾次出現，超過第 1 次就顯示「第N次入廠」標籤。
+  repairVisitCounts = computeRepairVisitCounts(rows);
+
+  $('#main').innerHTML = `
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="repairSearchSn" placeholder="搜尋機台序號 (sn)" value="${initialSearch}">
+        <span class="page-info" id="repairCount"></span>
+      </div>
+      <div style="margin:14px 0;">
+        <button class="btn" id="addRepairBtn">＋ 新增維修紀錄</button>
+      </div>
+      <div class="filter-pill-row" id="repairStatusFilterRow">
+        <button class="filter-pill active" data-status="">全部 (${rows.length})</button>
+        ${statuses.map(s=>{
+          const c = repairStatusColor(s);
+          return `<button class="filter-pill" data-status="${s}" style="--pill-bg:${c.bg};--pill-fg:${c.fg};">${s} (${statusCounts[s]||0})</button>`;
+        }).join('')}
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}<th>維修紀錄歷程</th></tr></thead>
+        <tbody id="repairRows"></tbody>
+      </table></div>
+    </div>
+  `;
+  $('#addRepairBtn').onclick = openRepairAddModal;
+
+  $('#repairSearchSn').oninput = debounce(()=>{
+    repairSearchSn = $('#repairSearchSn').value.toLowerCase();
+    drawRepairRows(rows, cols, dateKeys);
+  });
+
+  $$('#repairStatusFilterRow .filter-pill').forEach(btn=>{
+    btn.onclick = ()=>{
+      repairFilterStatus = btn.dataset.status;
+      $$('#repairStatusFilterRow .filter-pill').forEach(b=>b.classList.toggle('active', b===btn));
+      drawRepairRows(rows, cols, dateKeys);
+    };
+  });
+
+  drawRepairRows(rows, cols, dateKeys);
+}
+
+function drawRepairRows(rows, cols, dateKeys){
+  let filtered = repairFilterStatus ? rows.filter(r=>getField(r,'機器狀態')===repairFilterStatus) : rows;
+  if(repairSearchSn) filtered = filtered.filter(r=>String(getField(r,'機器編號')||'').toLowerCase().includes(repairSearchSn));
+  $('#repairCount').textContent = `共 ${filtered.length} 筆`;
+  $('#repairRows').innerHTML = filtered.length ? filtered.map(r=>{
+    const visit = repairVisitCounts.get(r._row) || 1;
+    const filled = hasRepairDetailFilled(r);
+    const cellsHtml = cols.map(c=>{
+      if(c.key==='機器狀態') return `<td>${repairStatusBadgeHtml(getField(r,c.key))}</td>`;
+      if(c.key==='機器編號'){
+        const badge = visit>1 ? ` <span class="badge" style="background:#F1E7FB;color:#7A3AB2;">第${visit}次入廠</span>` : '';
+        return `<td>${fmt(getField(r,c.key))}${badge}</td>`;
+      }
+      return `<td>${dateKeys.includes(c.key) ? fmtDate(getField(r,c.key)) : fmt(getField(r,c.key))}</td>`;
+    }).join('');
+    return `<tr>${cellsHtml}<td><button class="btn ${filled?'':'secondary'}" onclick="openRepairDetailModal(${r._row})">維修紀錄歷程</button></td></tr>`;
+  }).join('') : `<tr><td colspan="${cols.length+1}" class="empty">沒有符合條件的維修紀錄</td></tr>`;
+}
+
+// 目前詳情視窗開著的是哪一列（Google Sheet 實際列號），儲存時要用這個定位
+let currentRepairRow = null;
+
+function openRepairDetailModal(rowIndex){
+  const r = (DATA.repair_log||[]).find(x=>x._row===rowIndex);
+  if(!r) return;
+  currentRepairRow = rowIndex;
+
+  $('#rd_operator').innerHTML = '<option value="">請選擇</option>' + settingValues('operator').map(o=>`<option value="${o}">${o}</option>`).join('');
+
+  $('#repairDetailInfo').innerHTML = `機器編號：<strong>${fmt(getField(r,'機器編號'))}</strong>　店號：${fmt(getField(r,'店號'))}　案件編號：${fmt(getField(r,'案件編號'))}`;
+  $('#rd_issue').value = getField(r,'問題回報') || '';
+  $('#rd_other_issue').value = getField(r,'檢修問題') || '';
+  $('#rd_parts').value = getField(r,'更換零件') || '';
+  const doneDate = getField(r,'檢修完成日期');
+  $('#rd_done_date').value = firstDateOnly(doneDate);
+  $('#rd_operator').value = getField(r,'檢修人員') || '';
+  $('#repairDetailMsg').innerHTML = '';
+  $('#repairDetailModal').classList.add('show');
+}
+
+function closeRepairDetailModal(){
+  $('#repairDetailModal').classList.remove('show');
+}
+$('#repairDetailModalClose').onclick = closeRepairDetailModal;
+$('#repairDetailCancel').onclick = closeRepairDetailModal;
+$('#repairDetailModal').addEventListener('click', (e)=>{ if(e.target.id==='repairDetailModal') closeRepairDetailModal(); });
+
+$('#repairDetailSave').onclick = async ()=>{
+  if(currentRepairRow===null) return;
+  const data = {
+    '問題回報': $('#rd_issue').value || null,
+    '檢修問題': $('#rd_other_issue').value || null,
+    '更換零件': $('#rd_parts').value || null,
+    '檢修完成日期': $('#rd_done_date').value || null,
+    '檢修人員': $('#rd_operator').value || null
+  };
+  try{
+    await callApi({ action:'updateRepairLog', row: currentRepairRow, data });
+    // 樂觀更新：直接改本地資料重畫表格，不用整包重新呼叫 fetchData()
+    const r = (DATA.repair_log||[]).find(x=>x._row===currentRepairRow);
+    if(r) Object.assign(r, data);
+    closeRepairDetailModal();
+    if(currentTab==='repair') render();
+  }catch(err){
+    $('#repairDetailMsg').innerHTML = '<div class="msg error">儲存失敗：'+err.message+'</div>';
+  }
+};
+
+// ---------- 新增維修紀錄 ----------
+const REPAIR_ADD_FIELD_CONFIG = [
+  { key:'機器狀態', type:'select', options:['待維修','維修完成','無法維修'] },
+  { key:'機器編號', type:'text' },
+  { key:'店號', type:'text' },
+  { key:'案件編號', type:'text' },
+  { key:'問題回報', type:'textarea', full:true, rows:4 },
+  { key:'其他資訊', type:'text' },
+  { key:'機器退至NID日期（MO系統）', type:'date' },
+  { key:'NID回台灣日期', type:'date' },
+  { key:'入芳苑日期', type:'date' },
+  { key:'維修出庫日期', type:'date' },
+  { key:'檢修問題', type:'textarea', full:true, rows:4 },
+  { key:'更換零件', type:'textarea', rows:3 },
+  { key:'檢修完成日期', type:'date' },
+  { key:'檢修人員', type:'select', options:settingValues('operator') }
+];
+
+function openRepairAddModal(){
+  // 檢修人員的選項清單是從 settings 分頁抓的，每次打開都重新抓一次，確保是最新名單
+  const cfg = REPAIR_ADD_FIELD_CONFIG.map(c=>{
+    if(c.key==='檢修人員') return Object.assign({}, c, { options: settingValues('operator') });
+    return c;
+  });
+  $('#repairAddGrid').innerHTML = cfg.map(c=>issueFieldInputHtml(c, {})).join('');
+  $('#repairAddMsg').innerHTML = '';
+  $('#repairAddModal').classList.add('show');
+}
+function closeRepairAddModal(){
+  $('#repairAddModal').classList.remove('show');
+}
+$('#repairAddModalClose').onclick = closeRepairAddModal;
+$('#repairAddCancel').onclick = closeRepairAddModal;
+$('#repairAddModal').addEventListener('click', (e)=>{ if(e.target.id==='repairAddModal') closeRepairAddModal(); });
+
+$('#repairAddSave').onclick = async ()=>{
+  const data = {};
+  $$('#repairAddGrid [data-field]').forEach(el=>{
+    data[el.dataset.field] = el.value || null;
+  });
+  $('#repairAddMsg').innerHTML = '';
+  $('#repairAddSave').disabled = true;
+  $('#repairAddSave').textContent = '儲存中…';
+  try{
+    await callApi({ action:'addRepairLog', data });
+    // NO 是後端自動編號的，新增後整包重抓一次確保資料（含 _row）正確
+    await fetchData();
+    closeRepairAddModal();
+    if(currentTab==='repair') render();
+  }catch(err){
+    $('#repairAddMsg').innerHTML = '<div class="msg error">儲存失敗：'+err.message+'</div>';
+  }finally{
+    $('#repairAddSave').disabled = false;
+    $('#repairAddSave').textContent = '儲存';
+  }
+};
+
+function renderLowStock(){
+  const s = computeStats();
+  $('#main').innerHTML = `
+    <div class="panel">
+      <h3 style="margin-top:0;">低庫存零件清單</h3>
+      <div class="note" style="margin-bottom:14px;color:var(--ink-soft);font-size:13px;">共 ${s.lowStock.length} 項・數量 &lt; 最低庫存</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>品名</th><th>模組</th><th>分類</th><th>目前庫存</th><th>最低庫存</th><th>備註</th></tr></thead>
+        <tbody>${s.lowStock.length ? s.lowStock.map(i=>`
+          <tr>
+            <td>${fmt(i.name)}</td><td>${fmt(i.module)}</td><td>${fmt(i.category)}</td>
+            <td><span class="badge low">${fmt(i.quantity)}</span></td><td>${fmt(i.min_qty)}</td><td>${fmt(i.note)}</td>
+          </tr>`).join('') : '<tr><td colspan="6" class="empty">目前沒有低庫存零件</td></tr>'}</tbody>
+      </table></div>
+    </div>
+  `;
+}
+
+/* ---------- 新增機台 modal ---------- */
+
+function openMachineModal(){
+  const types = settingValues('type');
+  const statuses = settingValues('status');
+  $('#m_type').innerHTML = types.map(t=>`<option value="${t}">${t}</option>`).join('');
+  $('#m_status').innerHTML = statuses.map(s=>`<option value="${s}">${s}</option>`).join('');
+  $('#m_sn').value=''; $('#m_store_no').value=''; $('#m_issue').value=''; $('#m_owner').value='';
+  $('#machineMsg').innerHTML='';
+  $('#machineModal').classList.add('show');
+}
+
+$('#machineCancel').onclick = ()=> $('#machineModal').classList.remove('show');
+
+$('#machineSave').onclick = async ()=>{
+  const sn = $('#m_sn').value.trim();
+  if(!sn){ $('#machineMsg').innerHTML = '<div class="msg error">請輸入機台序號</div>'; return; }
+  const data = {
+    sn, type: $('#m_type').value, status: $('#m_status').value,
+    store_no: $('#m_store_no').value || null,
+    issue: $('#m_issue').value || null,
+    owner: $('#m_owner').value || null
+  };
+  try{
+    await callApi({ action:'addMachine', data });
+    // 樂觀更新：後端已寫入成功，直接把這筆機台加進本地資料並重畫畫面，
+    // 不用整包重新呼叫 fetchData()（那會把 7 個分頁全部重抓一次）。
+    const now = clientNowStr();
+    DATA.machines = DATA.machines || [];
+    DATA.machines.push(Object.assign({}, data, { created_at: now, updated_at: now, updated_by: null, batch: null }));
+    $('#machineModal').classList.remove('show');
+    $('#statusLine').textContent = '已連線・共 ' + DATA.machines.length + ' 筆機台資料';
+    currentTab='machines'; setActiveTab('machines'); render();
+  }catch(err){
+    $('#machineMsg').innerHTML = '<div class="msg error">新增失敗：'+err.message+'</div>';
+  }
+};
+
+/* ---------- API 設定 modal ---------- */
+
+$('#apiBtn').onclick = ()=>{
+  $('#apiUrlInput').value = API_URL;
+  $('#apiMsg').innerHTML='';
+  $('#apiModal').classList.add('show');
+};
+$('#apiCancel').onclick = ()=> $('#apiModal').classList.remove('show');
+$('#apiSave').onclick = async ()=>{
+  const url = $('#apiUrlInput').value.trim();
+  if(!url){ $('#apiMsg').innerHTML='<div class="msg error">請輸入網址</div>'; return; }
+  API_URL = url;
+  localStorage.setItem(LS_KEY, url);
+  $('#apiModal').classList.remove('show');
+  await fetchData();
+};
+
+$('#detailModalClose').onclick = ()=> $('#detailModal').classList.remove('show');
+$('#detailModalClose2').onclick = ()=> $('#detailModal').classList.remove('show');
+$('#detailModal').addEventListener('click', (e)=>{ if(e.target.id==='detailModal') $('#detailModal').classList.remove('show'); });
+
+let currentDetailSn = null;
+
+$('#d_issueEditBtn').onclick = ()=>{
+  $('#d_issueEditRow').style.display = 'block';
+};
+// 找出本地 DATA.machines 裡對應 sn 的機台物件並就地合併欄位，
+// 讓畫面立刻反映最新狀態，不用每次都整包重新呼叫 fetchData()。
+function patchMachineLocal(sn, patch){
+  const m = (DATA.machines||[]).find(x=>x.sn===sn);
+  if(m) Object.assign(m, patch);
+  return m;
+}
+
+$('#d_issueSaveBtn').onclick = async ()=>{
+  const newIssue = $('#d_issueInput').value;
+  try{
+    await callApi({ action:'updateMachine', sn: currentDetailSn, data:{ issue: newIssue } });
+    patchMachineLocal(currentDetailSn, { issue: newIssue, updated_at: clientNowStr() });
+    openDetailModal(currentDetailSn);
+  }catch(err){
+    $('#detailMsg').innerHTML = '<div class="msg error">更新問題描述失敗：'+err.message+'</div>';
+  }
+};
+
+$('#d_updateBtn').onclick = async ()=>{
+  const sn = currentDetailSn;
+  const newStatus = $('#d_status').value;
+  const operator = $('#d_operator').value;
+  const note = $('#d_note').value;
+  const parts = $('#d_parts').value;
+  $('#detailMsg').innerHTML = '';
+  try{
+    await callApi({ action:'updateMachine', sn: sn, data:{ status: newStatus }, operator: operator || undefined });
+    await callApi({ action:'addMachineLog', data:{ sn: sn, step: newStatus, note: note, parts: parts, operator: operator } });
+    const now = clientNowStr();
+    patchMachineLocal(sn, { status: newStatus, updated_at: now, updated_by: operator || undefined });
+    DATA.machine_log = DATA.machine_log || [];
+    DATA.machine_log.push({ sn: sn, step: newStatus, note: note, parts: parts, operator: operator, timestamp: now });
+    openDetailModal(sn);
+    $('#detailMsg').innerHTML = '<div class="msg ok">已更新狀態並記錄操作</div>';
+  }catch(err){
+    $('#detailMsg').innerHTML = '<div class="msg error">更新失敗：'+err.message+'</div>';
+  }
+};
+
+/* ---------- tabs ---------- */
+
+function setActiveTab(tab){
+  $$('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+}
+$$('#tabs button').forEach(btn=>{
+  btn.onclick = ()=>{
+    currentTab = btn.dataset.tab;
+    setActiveTab(currentTab);
+    render();
+  };
 });
 
-// 在表頭陣列裡找出某個英文 key 對應的欄位 index，找不到英文原名就試試看中文別名
-function resolveColumnIndex(headers, canonicalKey, altMap) {
-  let idx = headers.indexOf(canonicalKey);
-  if (idx > -1) return idx;
-  const alts = (altMap && altMap[canonicalKey]) || [];
-  for (let i = 0; i < alts.length; i++) {
-    idx = headers.indexOf(alts[i]);
-    if (idx > -1) return idx;
-  }
-  return -1;
-}
+/* ---------- init ---------- */
 
-// ---------- 快取設定 ----------
-// getAllData() 會把 7 個分頁整張表讀出來，成本很高。
-// 前端每次新增/更新後都會重新呼叫一次，所以這裡加一層短時間快取，
-// 同一段時間內的重複讀取直接吃快取，不用重新掃 Google Sheet。
-// 任何一個新增/更新動作完成後都會主動清除快取，所以不會看到過舊的資料。
-const CACHE_KEY = 'all_data_v1';
-const CACHE_TTL_SEC = 30;
-
-function doGet(e) {
-  try {
-    const action = (e.parameter.action || 'data');
-    if (action === 'data') {
-      return jsonResponse(getAllDataCached());
-    }
-    return jsonResponse({ error: 'unknown action' }, 400);
-  } catch (err) {
-    return jsonResponse({ error: String(err) }, 500);
-  }
-}
-
-function doPost(e) {
-  // 加鎖：同一時間只讓一個新增/更新動作真的去改 Google Sheet。
-  // 沒有這道鎖的話，多人同時操作（例如 2 個人同時調整同一項庫存）可能會發生
-  // 「後寫入的把先寫入的蓋掉」，資料看起來對不起來。
-  // 最多等 10 秒排隊；如果 10 秒內還是搶不到鎖（代表當下真的很多人同時在寫），
-  // 才會回傳錯誤讓前端顯示「請稍後再試」，而不是讓資料被寫亂。
-  const lock = LockService.getScriptLock();
-  try {
-    const body = JSON.parse(e.postData.contents);
-    const action = body.action;
-
-    const gotLock = lock.tryLock(10000);
-    if (!gotLock) {
-      return jsonResponse({ error: '系統目前操作量較大，請稍後再試一次' }, 429);
-    }
-
-    let result;
-    switch (action) {
-      case 'addMachine':
-        result = addMachine(body.data);
-        break;
-      case 'updateMachine':
-        result = updateMachine(body.sn, body.data, body.operator);
-        break;
-      case 'addRepairLog':
-        result = addRepairLog(body.data);
-        break;
-      case 'updateRepairLog':
-        result = updateRepairLog(body.row, body.data);
-        break;
-      case 'addMachineLog':
-        result = addMachineLog(body.data);
-        break;
-      case 'addMachineEvent':
-        result = addMachineEvent(body.data);
-        break;
-      case 'adjustInventory':
-        result = adjustInventory(body.name, body.delta, body.note, body.sn, body.operator);
-        break;
-      case 'addSettingOption':
-        result = addSettingOption(body.key, body.value);
-        break;
-      case 'addIssueLog':
-        result = addIssueLog(body.data);
-        break;
-      case 'updateIssueLog':
-        result = updateIssueLog(body.row, body.data);
-        break;
-      case 'deleteIssueLog':
-        result = deleteIssueLog(body.row);
-        break;
-      default:
-        return jsonResponse({ error: 'unknown action: ' + action }, 400);
-    }
-    return jsonResponse({ success: true, result: result });
-  } catch (err) {
-    return jsonResponse({ error: String(err) }, 500);
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/* ---------- 讀取所有資料（含快取） ---------- */
-
-function getAllDataCached() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get(CACHE_KEY);
-  if (cached) {
-    try {
-      return JSON.parse(cached);
-    } catch (e) {
-      // 快取內容壞掉就當作沒快取，往下重新讀表
-    }
-  }
-  const data = getAllData();
-  try {
-    const json = JSON.stringify(data);
-    // CacheService 單筆上限 100KB，超過就不快取（改成每次都讀表，但不會出錯）
-    if (json.length < 100000) {
-      cache.put(CACHE_KEY, json, CACHE_TTL_SEC);
-    }
-  } catch (e) {
-    // 寫快取失敗不影響主流程
-  }
-  return data;
-}
-
-function invalidateCache() {
-  CacheService.getScriptCache().remove(CACHE_KEY);
-}
-
-function getAllData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const out = {};
-  Object.values(SHEET_NAMES).forEach(function (name) {
-    const sheet = ss.getSheetByName(name);
-    const headerAliasMap = (name === SHEET_NAMES.MACHINES) ? MACHINE_HEADER_TO_CANONICAL : null;
-    out[name] = sheet ? sheetToObjects(sheet, headerAliasMap) : [];
-  });
-  return out;
-}
-
-function sheetToObjects(sheet, headerAliasMap) {
-  headerAliasMap = headerAliasMap || {};
-  const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
-  const rawHeaders = values[0];
-  const headers = rawHeaders.map(function (h) { return headerAliasMap[h] || h; });
-  const rows = [];
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    if (row.every(function (c) { return c === '' || c === null; })) continue;
-    const obj = { _row: i + 1 }; // 這一列在 Google Sheet 裡實際的列號（1-based），之後要更新這一列時用得到
-    headers.forEach(function (h, idx) {
-      let v = row[idx];
-      if (v instanceof Date) v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-      obj[h] = (v === '' ? null : v);
-    });
-    rows.push(obj);
-  }
-  return rows;
-}
-
-/* ---------- 新增機台 ---------- */
-
-function addMachine(data) {
-  const sheet = getSheet(SHEET_NAMES.MACHINES);
-  const headers = getHeaders(sheet);
-  const now = nowStr();
-  data.created_at = data.created_at || now;
-  data.updated_at = now;
-  appendRowByHeaders(sheet, headers, data, MACHINE_HEADER_TO_CANONICAL);
-  invalidateCache();
-  return { sn: data.sn };
-}
-
-/* ---------- 更新機台（用 sn 找列） ---------- */
-// 優化重點：
-// 1. 不再用 getDataRange().getValues() 把整張表拉進記憶體逐列比對，
-//    改用 TextFinder 只在 sn 那一欄搜尋，資料多時明顯更快。
-// 2. 不再一個欄位一個欄位呼叫 setValue()（每次都是一次獨立 API 呼叫），
-//    改成先讀出整列、在記憶體裡改好，最後一次 setValues() 寫回。
-function updateMachine(sn, data, operator) {
-  const sheet = getSheet(SHEET_NAMES.MACHINES);
-  const headers = getHeaders(sheet);
-  const snColIndex = resolveColumnIndex(headers, 'sn', MACHINE_ALT_HEADERS);
-  if (snColIndex === -1) throw new Error('machines 分頁缺少 sn（或「機器號」）欄位');
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) throw new Error('找不到 sn=' + sn + ' 的機台');
-
-  const snRange = sheet.getRange(2, snColIndex + 1, lastRow - 1, 1);
-  const match = snRange.createTextFinder(String(sn)).matchEntireCell(true).findNext();
-  if (!match) throw new Error('找不到 sn=' + sn + ' 的機台');
-
-  const rowIndex = match.getRow();
-  const rowRange = sheet.getRange(rowIndex, 1, 1, headers.length);
-  const rowValues = rowRange.getValues()[0];
-
-  data.updated_at = nowStr();
-  if (operator) data.updated_by = operator;
-
-  Object.keys(data).forEach(function (key) {
-    const col = resolveColumnIndex(headers, key, MACHINE_ALT_HEADERS);
-    if (col > -1) rowValues[col] = data[key];
-  });
-
-  rowRange.setValues([rowValues]);
-  invalidateCache();
-  return { sn: sn, updated: true };
-}
-
-/* ---------- 新增維修紀錄 ---------- */
-
-// 算出下一個 NO（掃描目前已用過的數字，取最大值 +1）
-function nextRepairNo(sheet, headers) {
-  const noCol = headers.indexOf('NO');
-  const lastRow = sheet.getLastRow();
-  let max = 0;
-  if (lastRow >= 2 && noCol > -1) {
-    const values = sheet.getRange(2, noCol + 1, lastRow - 1, 1).getValues();
-    values.forEach(function (r) {
-      const n = Number(r[0]);
-      if (!isNaN(n) && n > max) max = n;
-    });
-  }
-  return max + 1;
-}
-
-function addRepairLog(data) {
-  const sheet = getSheet(SHEET_NAMES.REPAIR_LOG);
-  const headers = getHeaders(sheet);
-  if (!data['NO']) data['NO'] = nextRepairNo(sheet, headers);
-  appendRowByHeaders(sheet, headers, data);
-  invalidateCache();
-  return { no: data['NO'] };
-}
-
-// 確保 sheet 裡有 requiredHeaders 列出的每一個欄位，缺少的話會自動在最後面新增一欄。
-// 用在「維修紀錄詳情」編輯視窗，讓前端要填的欄位（機器問題以外的檢修問題/更換零件/
-// 檢修完成日期/檢修人員）第一次使用時會自動長出對應欄位，不用先手動去 Sheet 加欄位。
-function ensureHeaders(sheet, requiredHeaders) {
-  const lastCol = sheet.getLastColumn();
-  const headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
-  let changed = false;
-  requiredHeaders.forEach(function (h) {
-    if (headers.indexOf(h) === -1) {
-      headers.push(h);
-      changed = true;
-    }
-  });
-  if (changed) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  }
-  return headers;
-}
-
-// 更新維修紀錄裡「已存在」的某一列（用 sheetToObjects 給的 _row 列號定位），
-// 而不是像 addRepairLog 一樣新增一列。用在「維修紀錄詳情」編輯視窗的儲存動作。
-function updateRepairLog(rowIndex, data) {
-  rowIndex = Number(rowIndex);
-  const sheet = getSheet(SHEET_NAMES.REPAIR_LOG);
-  const lastRow = sheet.getLastRow();
-  if (!rowIndex || rowIndex < 2 || rowIndex > lastRow) {
-    throw new Error('找不到這筆維修紀錄（row=' + rowIndex + '）');
-  }
-  const headers = ensureHeaders(sheet, Object.keys(data));
-  const rowRange = sheet.getRange(rowIndex, 1, 1, headers.length);
-  const rowValues = rowRange.getValues()[0];
-  Object.keys(data).forEach(function (key) {
-    const col = headers.indexOf(key);
-    if (col > -1) rowValues[col] = data[key];
-  });
-  rowRange.setValues([rowValues]);
-  invalidateCache();
-  return { row: rowIndex, updated: true };
-}
-
-/* ---------- 新增機台操作紀錄（詳情視窗的「操作記錄」） ---------- */
-
-function addMachineLog(data) {
-  const sheet = getSheet(SHEET_NAMES.MACHINE_LOG);
-  const headers = getHeaders(sheet);
-  data.timestamp = data.timestamp || nowStr();
-  appendRowByHeaders(sheet, headers, data);
-  invalidateCache();
-  return { ok: true };
-}
-
-/* ---------- 新增機台生命週期事件（例如：第N次台灣出貨、NID入庫、機器損壞回報...） ---------- */
-
-function addMachineEvent(data) {
-  const sheet = getSheet(SHEET_NAMES.MACHINE_EVENTS);
-  const headers = getHeaders(sheet);
-  appendRowByHeaders(sheet, headers, data);
-  invalidateCache();
-  return { ok: true };
-}
-
-/* ---------- 調整庫存並記錄 log ---------- */
-// 優化重點：用 TextFinder 只在 name 那一欄搜尋，取代整表逐列比對。
-function adjustInventory(name, delta, note, sn, operator) {
-  const invSheet = getSheet(SHEET_NAMES.INVENTORY);
-  const invHeaders = getHeaders(invSheet);
-  const nameColIndex = invHeaders.indexOf('name');
-  const qtyColIndex = invHeaders.indexOf('quantity');
-  if (nameColIndex === -1 || qtyColIndex === -1) throw new Error('inventory 分頁缺少 name 或 quantity 欄位');
-
-  const lastRow = invSheet.getLastRow();
-  if (lastRow < 2) throw new Error('找不到品項：' + name);
-
-  const nameRange = invSheet.getRange(2, nameColIndex + 1, lastRow - 1, 1);
-  const match = nameRange.createTextFinder(String(name)).matchEntireCell(true).findNext();
-  if (!match) throw new Error('找不到品項：' + name);
-
-  const rowIndex = match.getRow();
-  const qtyCell = invSheet.getRange(rowIndex, qtyColIndex + 1);
-  const current = Number(qtyCell.getValue()) || 0;
-  const newQty = current + Number(delta);
-  qtyCell.setValue(newQty);
-
-  const logSheet = getSheet(SHEET_NAMES.INVENTORY_LOG);
-  const logHeaders = getHeaders(logSheet);
-  appendRowByHeaders(logSheet, logHeaders, {
-    name: name,
-    type: delta >= 0 ? '入庫' : '出庫',
-    delta: delta,
-    quantity_after: newQty,
-    note: note || null,
-    sn: sn || null,
-    operator: operator || 'unknown',
-    timestamp: nowStr()
-  });
-  invalidateCache();
-  return { name: name, quantity_after: newQty };
-}
-
-/* ---------- 新增 settings 選項（例如新的 type / status） ---------- */
-
-function addSettingOption(key, value) {
-  const sheet = getSheet(SHEET_NAMES.SETTINGS);
-  const values = sheet.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][0] === key && values[i][1] === value) {
-      return { added: false, reason: 'already exists' };
-    }
-  }
-  sheet.appendRow([key, value]);
-  invalidateCache();
-  return { added: true };
-}
-
-/* ---------- 店內機器問題追蹤（issue_log，取代 FCM1 那份 Google Sheet） ---------- */
-
-// 一次性工具：建立 issue_log 分頁跟表頭。
-// 一次性工具：issue_log 分頁已經建立、資料也搬過去了，之前把 A02/A03/P04
-// 三個模組欄位標題誤植成統一的「機頭編號」，這裡改回正確名稱，只改標題文字，不動底下資料。
-function fixIssueLogModuleHeaders() {
-  const sheet = getSheet(SHEET_NAMES.ISSUE_LOG);
-  const headers = getHeaders(sheet);
-  const renames = {
-    '機頭編號A02': '電箱編號A02',
-    '機頭編號A03': '人機組編號A03',
-    '機頭編號P04': '人機介面編號P04'
-  };
-  let changed = 0;
-  Object.keys(renames).forEach(function (oldName) {
-    const col = headers.indexOf(oldName);
-    if (col > -1) {
-      sheet.getRange(1, col + 1).setValue(renames[oldName]);
-      changed++;
-    }
-  });
-  invalidateCache();
-  Logger.log('已修正 ' + changed + ' 個欄位標題名稱');
-}
-
-// 分頁如果已經存在「而且表頭也已經寫好」，就不會動它，避免蓋掉資料；
-// 但如果分頁存在卻是空的（例如之前建立中斷過），會自動補上表頭，不會卡住。
-function setupIssueLogSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAMES.ISSUE_LOG);
-
-  if (sheet && sheet.getLastColumn() > 0 && sheet.getLastRow() > 0) {
-    Logger.log('issue_log 分頁已經存在、表頭也已經有內容了，沒有做任何變更。');
-    return;
-  }
-
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAMES.ISSUE_LOG);
-  }
-
-  sheet.getRange(1, 1, 1, ISSUE_LOG_HEADERS.length).setValues([ISSUE_LOG_HEADERS]);
-  sheet.getRange(1, 1, 1, ISSUE_LOG_HEADERS.length)
-    .setFontWeight('bold')
-    .setBackground('#2F6F4E')
-    .setFontColor('#FFFFFF');
-  sheet.setFrozenRows(1);
-  sheet.autoResizeColumns(1, ISSUE_LOG_HEADERS.length);
-  Logger.log('已建立/補齊 issue_log 分頁的表頭');
-}
-
-// 算出下一個 TRACK NO.（掃描目前已用過的 FIX-250xxx，取最大值 +1）。
-// 250421 是承接 FCM1 舊分頁的編號基準，即使 issue_log 是空的，下一筆也會從 250422 開始。
-function nextIssueTrackNo(sheet, headers) {
-  const trackCol = headers.indexOf('TRACK NO.');
-  const lastRow = sheet.getLastRow();
-  let max = 250421;
-  if (lastRow >= 2 && trackCol > -1) {
-    const values = sheet.getRange(2, trackCol + 1, lastRow - 1, 1).getValues();
-    values.forEach(function (r) {
-      const m = String(r[0] || '').match(/^FIX-(\d+)$/);
-      if (m) {
-        const n = Number(m[1]);
-        if (n > max) max = n;
-      }
-    });
-  }
-  return 'FIX-' + (max + 1);
-}
-
-function addIssueLog(data) {
-  const sheet = getSheet(SHEET_NAMES.ISSUE_LOG);
-  const headers = getHeaders(sheet);
-  data['TRACK NO.'] = nextIssueTrackNo(sheet, headers);
-  appendRowByHeaders(sheet, headers, data);
-  invalidateCache();
-  return { trackNo: data['TRACK NO.'] };
-}
-
-function updateIssueLog(rowIndex, data) {
-  rowIndex = Number(rowIndex);
-  const sheet = getSheet(SHEET_NAMES.ISSUE_LOG);
-  const lastRow = sheet.getLastRow();
-  if (!rowIndex || rowIndex < 2 || rowIndex > lastRow) {
-    throw new Error('找不到這筆問題追蹤紀錄（row=' + rowIndex + '）');
-  }
-  const headers = getHeaders(sheet);
-  const rowRange = sheet.getRange(rowIndex, 1, 1, headers.length);
-  const rowValues = rowRange.getValues()[0];
-  Object.keys(data).forEach(function (key) {
-    const col = headers.indexOf(key);
-    if (col > -1) rowValues[col] = data[key];
-  });
-  rowRange.setValues([rowValues]);
-  invalidateCache();
-  return { row: rowIndex, updated: true };
-}
-
-// 刪除一筆問題追蹤紀錄。用 sheetToObjects 給的 _row 列號定位，整列從 Google Sheet 移除
-// （不是清空內容，是真的把這一列刪掉，底下的列會往上遞補，所以刪除後前端會整包重新抓一次資料，
-// 不會用舊的 _row 去做局部更新，避免其他列的列號跟著位移卻沒同步到）。
-function deleteIssueLog(rowIndex) {
-  rowIndex = Number(rowIndex);
-  const sheet = getSheet(SHEET_NAMES.ISSUE_LOG);
-  const lastRow = sheet.getLastRow();
-  if (!rowIndex || rowIndex < 2 || rowIndex > lastRow) {
-    throw new Error('找不到這筆問題追蹤紀錄（row=' + rowIndex + '）');
-  }
-  sheet.deleteRow(rowIndex);
-  invalidateCache();
-  return { row: rowIndex, deleted: true };
-}
-
-// 一次性工具：把 FCM1 舊 Google Sheet 裡「FCM1_店內機器問題_250717KAY改」分頁的 421 筆舊資料，
-// 搬進 issue_log（只搬新版 23 欄有對應到的欄位；原因/對策/回NID時間/到台灣日期等
-// 舊分頁專屬、新版沒有的欄位不會搬，會留在舊分頁當歷史記錄）。
-// 只要執行一次；重複執行會造成資料重複，所以執行前請先確認 issue_log 是空的。
-function migrateFCM1IssueLog() {
-  const FCM1_ID = '1K2pNA0enThimYg7vlx4dmRsLat6oJdhUWdtPnIiclFA';
-  const OLD_TAB = 'FCM1_店內機器問題_250717KAY改';
-
-  const targetSheet = getSheet(SHEET_NAMES.ISSUE_LOG);
-  const targetHeaders = getHeaders(targetSheet);
-
-  if (targetSheet.getLastRow() > 1) {
-    throw new Error('issue_log 裡已經有資料了，為了避免搬重複，這裡先中止。如果確定要重搬，請先手動清空 issue_log 的資料列（保留表頭）再執行。');
-  }
-
-  const srcSs = SpreadsheetApp.openById(FCM1_ID);
-  const srcSheet = srcSs.getSheetByName(OLD_TAB);
-  if (!srcSheet) throw new Error('在 FCM1 試算表裡找不到分頁：' + OLD_TAB);
-
-  const srcHeaders = srcSheet.getRange(1, 1, 1, srcSheet.getLastColumn()).getValues()[0];
-  const srcLastRow = srcSheet.getLastRow();
-  if (srcLastRow < 2) {
-    Logger.log('舊分頁沒有資料可搬。');
-    return;
-  }
-  const srcValues = srcSheet.getRange(2, 1, srcLastRow - 1, srcHeaders.length).getValues();
-
-  // 新欄位名稱 -> 舊分頁欄位名稱 的對照。新分頁沒有的舊欄位（原因/對策/回NID時間/到台灣日期/
-  // MAIL回覆/回台追蹤旗標/順原確認/from Bin/提供SOLUTION日期/詢問經過天數/KAY詢問狀態日期/經過天數）
-  // 直接不對應，資料不會搬過來，留在舊分頁。
-  const NEW_TO_OLD = {
-    'TRACK NO.': 'TRACK NO.',
-    '店號': '店號',
-    '異常發生日期': '異常發生日期',
-    '分類1': '分類1',
-    '分類2': '分類2',
-    '分類3': '分類3',
-    '分類4': '分類4',
-    '最後一階（資料自動帶入）': '最後一階\n(資料自動帶入)',
-    '問題敘述': '問題敘述',
-    '排除歷程': '排除歷程',
-    '備註': '備註',
-    'LINE上聊天室名稱': 'LINE上聊天室名稱',
-    'LINE聊天室對話內容': 'LINE聊天室對話內容',
-    '機器目前狀態追蹤': '機器目前狀態追蹤',
-    'NID備品寄給維修人/店的時間': 'NID備品寄給維修人/店的時間',
-    '更換零件名稱': '更換零件名稱',
-    'PDCA': 'PDCA\n 追蹤',
-    '機器編號': '機器編號',
-    '機頭編號A01': '機頭編號A01',
-    '電箱編號A02': '電箱編號A02',
-    '人機組編號A03': '人機組編號A03',
-    '人機介面編號P04': '人機介面編號P04',
-    '地區': '地區'
-  };
-
-  const srcColIndex = {};
-  srcHeaders.forEach(function (h, i) { srcColIndex[h] = i; });
-
-  const rowsToAppend = [];
-  srcValues.forEach(function (srcRow) {
-    if (srcRow.every(function (c) { return c === '' || c === null; })) return;
-    const newRow = targetHeaders.map(function (h) {
-      const oldFieldName = NEW_TO_OLD[h];
-      if (oldFieldName === undefined) return null;
-      const idx = srcColIndex[oldFieldName];
-      if (idx === undefined) return null;
-      let v = srcRow[idx];
-      if (v instanceof Date) v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      return (v === '' ? null : v);
-    });
-    rowsToAppend.push(newRow);
-  });
-
-  if (rowsToAppend.length > 0) {
-    const startRow = targetSheet.getLastRow() + 1;
-    targetSheet.getRange(startRow, 1, rowsToAppend.length, targetHeaders.length).setValues(rowsToAppend);
-  }
-
-  invalidateCache();
-  Logger.log('已搬移 ' + rowsToAppend.length + ' 筆資料到 issue_log 分頁');
-}
-
-/* ---------- 共用工具 ---------- */
-
-function getSheet(name) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
-  if (!sheet) throw new Error('找不到分頁：' + name);
-  return sheet;
-}
-
-function getHeaders(sheet) {
-  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-}
-
-function appendRowByHeaders(sheet, headers, data, headerAliasMap) {
-  headerAliasMap = headerAliasMap || {};
-  const row = headers.map(function (h) {
-    const canonical = headerAliasMap[h] || h;
-    return (data[canonical] !== undefined ? data[canonical] : null);
-  });
-  sheet.appendRow(row);
-}
-
-function nowStr() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-}
-
-function jsonResponse(obj, statusCode) {
-  const output = ContentService.createTextOutput(JSON.stringify(obj));
-  output.setMimeType(ContentService.MimeType.JSON);
-  return output;
-}
+fetchData();
+</script>
+</body>
+</html>
