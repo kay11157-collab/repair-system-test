@@ -322,6 +322,7 @@
       <select id="rd_operator"><option value="">請選擇</option></select>
     </div>
     <div class="modal-actions">
+      <button class="btn secondary" id="repairDetailDelete" style="border-color:#B8752A;color:#B8752A;">刪除這筆</button>
       <button class="btn secondary" id="repairDetailCancel">取消</button>
       <button class="btn" id="repairDetailSave">儲存</button>
     </div>
@@ -1638,6 +1639,31 @@ $('#repairDetailSave').onclick = async ()=>{
     if(currentTab==='repair') render();
   }catch(err){
     $('#repairDetailMsg').innerHTML = '<div class="msg error">儲存失敗：'+err.message+'</div>';
+  }
+};
+
+$('#repairDetailDelete').onclick = async ()=>{
+  if(currentRepairRow===null) return;
+  const r = (DATA.repair_log||[]).find(x=>x._row===currentRepairRow);
+  const label = r ? ('NO ' + fmt(getField(r,'NO')) + '（機器編號：' + fmt(getField(r,'機器編號')) + '）') : '這筆';
+  if(!confirm(`確定要刪除 ${label} 這筆維修紀錄嗎？刪除後無法復原。`)) return;
+
+  $('#repairDetailMsg').innerHTML = '';
+  $('#repairDetailSave').disabled = true;
+  $('#repairDetailDelete').disabled = true;
+  $('#repairDetailDelete').textContent = '刪除中…';
+  try{
+    await callApi({ action:'deleteRepairLog', row: currentRepairRow });
+    // 刪除會讓底下的列往上遞補，其他列的 _row 都會跟著變，所以整包重新抓一次資料
+    await fetchData();
+    closeRepairDetailModal();
+    if(currentTab==='repair') render();
+  }catch(err){
+    $('#repairDetailMsg').innerHTML = '<div class="msg error">刪除失敗：'+err.message+'</div>';
+  }finally{
+    $('#repairDetailSave').disabled = false;
+    $('#repairDetailDelete').disabled = false;
+    $('#repairDetailDelete').textContent = '刪除這筆';
   }
 };
 
