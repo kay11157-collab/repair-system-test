@@ -1237,7 +1237,7 @@ function renderIssueLog(){
     const v = r['PDCA'];
     if(v) pdcaCounts[v] = (pdcaCounts[v]||0)+1;
   });
-  const pdcaOptions = ['P','D','C','A'].filter(k=>pdcaCounts[k]); // 只列出實際有資料的選項
+  const pdcaOptions = ['P','D','C','A']; // 固定顯示這四個，即使目前筆數是 0 也要出現
 
   $('#main').innerHTML = `
     <div class="panel">
@@ -1250,7 +1250,7 @@ function renderIssueLog(){
       </div>
       <div class="filter-pill-row" id="issuePdcaFilterRow">
         <button class="filter-pill active" data-pdca="">全部 (${rows.length})</button>
-        ${pdcaOptions.map(k=>`<button class="filter-pill" data-pdca="${k}">${k} (${pdcaCounts[k]})</button>`).join('')}
+        ${pdcaOptions.map(k=>`<button class="filter-pill" data-pdca="${k}">${k} (${pdcaCounts[k]||0})</button>`).join('')}
       </div>
       <div class="table-wrap" style="max-height:70vh;"><table>
         <thead><tr>${ISSUE_LOG_LIST_COLS.map(c=>`<th>${c}</th>`).join('')}<th>詳情</th></tr></thead>
